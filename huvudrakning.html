@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Huvudräkning</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1B2340; --bg:#EEF1F6; --card:#FFFFFF; --line:#D8DEE9;
+    --blue:#2B50E0; --blue-dark:#1E3AA8; --green:#2FA36B; --red:#E5484D; --amber:#FFC53D;
+    --muted:#6B7390; --radius:18px;
+    --font:"Space Grotesk", -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--ink); font-family:var(--font); height:100%;}
+  body{display:flex; flex-direction:column; min-height:100dvh;}
+  button{font-family:var(--font); cursor:pointer;}
+
+  header{display:flex; align-items:center; justify-content:space-between; padding:14px 18px 8px;}
+  .brand{font-weight:700; font-size:18px; letter-spacing:-0.02em;}
+  .brand small{display:block; font-weight:400; font-size:11px; color:var(--muted); letter-spacing:0.06em; text-transform:uppercase;}
+  .hdr-right{display:flex; gap:8px; align-items:center;}
+  .chip{border:1.5px solid var(--line); background:var(--card); border-radius:999px; padding:7px 12px; font-size:14px; font-weight:500;}
+  .chip.active{border-color:var(--blue); color:var(--blue);}
+
+  main{flex:1; padding:6px 18px 90px; max-width:560px; width:100%; margin:0 auto;}
+  .screen{display:none;}
+  .screen.visible{display:block; animation:fadeIn .18s ease;}
+  @keyframes fadeIn{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;}}
+
+  nav{position:fixed; bottom:0; left:0; right:0; background:var(--card); border-top:1.5px solid var(--line);
+      display:flex; justify-content:space-around; padding:8px 0 max(10px, env(safe-area-inset-bottom));}
+  nav button{background:none; border:none; font-size:13px; font-weight:500; color:var(--muted); padding:6px 18px; border-radius:12px;}
+  nav button.active{color:var(--blue); background:#E8EDFC;}
+
+  h2{font-size:22px; margin:14px 0 10px; letter-spacing:-0.02em;}
+  .sub{color:var(--muted); font-size:14px; margin:-6px 0 14px;}
+
+  .card{background:var(--card); border-radius:var(--radius); padding:16px; margin-bottom:12px; border:1.5px solid var(--line);}
+
+  /* skill picker */
+  .skill-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .skill-btn{background:var(--card); border:1.5px solid var(--line); border-radius:var(--radius); padding:16px 12px; text-align:left;}
+  .skill-btn .big{font-size:26px;}
+  .skill-btn .name{font-weight:700; font-size:15px; margin-top:6px;}
+  .skill-btn .lvl{font-size:12px; color:var(--muted); margin-top:2px;}
+  .skill-btn.selected{border-color:var(--blue); box-shadow:0 0 0 2px #2B50E033;}
+
+  .tables-wrap{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
+  .tbl{width:44px; height:44px; border-radius:12px; border:1.5px solid var(--line); background:var(--card); font-weight:700; font-size:16px;}
+  .tbl.on{background:var(--blue); border-color:var(--blue); color:#fff;}
+  .quick-row{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;}
+  .quick{border:none; background:#E8EDFC; color:var(--blue-dark); font-weight:600; font-size:13px; border-radius:999px; padding:8px 12px;}
+
+  .start-btn{width:100%; background:var(--blue); color:#fff; border:none; border-radius:16px;
+    padding:18px; font-size:18px; font-weight:700; margin-top:14px;}
+  .start-btn:disabled{background:#B9C3E8;}
+
+  /* drill */
+  .fuse-track{height:8px; background:#DDE3F0; border-radius:99px; overflow:hidden; margin:8px 0 4px;}
+  .fuse{height:100%; width:100%; background:var(--blue); border-radius:99px; transition:width .95s linear, background .3s;}
+  .fuse.low{background:var(--red);}
+  .drill-meta{display:flex; justify-content:space-between; font-size:13px; color:var(--muted); font-weight:500;}
+  .problem{font-size:min(17vw, 72px); font-weight:700; text-align:center; margin:26px 0 6px; letter-spacing:-0.02em; font-variant-numeric:tabular-nums;}
+  .answer-line{text-align:center; font-size:min(12vw, 46px); font-weight:700; min-height:1.3em;
+    color:var(--blue-dark); font-variant-numeric:tabular-nums;}
+  .answer-line .caret{display:inline-block; width:3px; height:.9em; background:var(--blue); vertical-align:-0.08em; animation:blink 1s steps(1) infinite;}
+  @keyframes blink{50%{opacity:0;}}
+  .flash-ok .problem{color:var(--green);}
+  .flash-bad .problem{color:var(--red);}
+  .tip{background:#FFF6DE; border:1.5px solid #F1D998; border-radius:14px; padding:10px 14px; font-size:14px; margin:10px 0 0; display:none;}
+  .tip.show{display:block;}
+
+  .keypad{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:18px;}
+  .key{background:var(--card); border:1.5px solid var(--line); border-radius:16px; font-size:26px; font-weight:700; padding:16px 0;}
+  .key:active{background:#E8EDFC;}
+  .key.action{font-size:16px;}
+  .key.ok{background:var(--blue); color:#fff; border-color:var(--blue);}
+  .quit{background:none; border:none; color:var(--muted); font-size:13px; margin-top:14px; width:100%; text-decoration:underline;}
+
+  /* results */
+  .result-hero{text-align:center; padding:10px 0 4px;}
+  .result-hero .huge{font-size:56px; font-weight:700; font-variant-numeric:tabular-nums;}
+  .result-hero .lbl{color:var(--muted); font-size:14px;}
+  .stat-row{display:flex; gap:10px; margin-top:12px;}
+  .stat{flex:1; background:var(--card); border:1.5px solid var(--line); border-radius:14px; padding:12px; text-align:center;}
+  .stat b{display:block; font-size:22px; font-variant-numeric:tabular-nums;}
+  .stat span{font-size:12px; color:var(--muted);}
+  .pb-banner{background:var(--amber); border-radius:14px; padding:10px 14px; font-weight:700; text-align:center; margin-top:12px; display:none;}
+  .miss-list{margin-top:6px; font-size:15px;}
+  .miss-list div{padding:7px 0; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; font-variant-numeric:tabular-nums;}
+  .miss-list div:last-child{border-bottom:none;}
+  .miss-list .wrong{color:var(--red); text-decoration:line-through; margin-right:8px;}
+  .miss-list .right{color:var(--green); font-weight:700;}
+
+  /* progress */
+  .prog-tabs{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;}
+  .streak-line{display:flex; align-items:center; gap:8px; font-weight:600; font-size:15px; margin-bottom:12px;}
+  .chart-card svg{width:100%; height:auto; display:block;}
+  .legend{display:flex; gap:14px; font-size:12px; color:var(--muted); margin-top:6px;}
+  .legend i{display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:5px; vertical-align:-1px;}
+  .mastery{display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin-top:10px;}
+  .m-cell{border-radius:12px; padding:10px 0; text-align:center; font-weight:700; font-size:15px; background:#E4E8F1; color:var(--muted);}
+  .m-cell small{display:block; font-size:10px; font-weight:500;}
+  .sess-item{display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); font-size:14px;}
+  .sess-item:last-child{border-bottom:none;}
+  .sess-item .when{color:var(--muted); font-size:12px;}
+
+  /* profiles */
+  .prof-list{display:flex; flex-direction:column; gap:10px;}
+  .prof-btn{display:flex; align-items:center; gap:12px; background:var(--card); border:1.5px solid var(--line);
+    border-radius:var(--radius); padding:14px; font-size:17px; font-weight:600; text-align:left;}
+  .prof-btn .em{font-size:26px;}
+  .prof-btn.current{border-color:var(--blue); box-shadow:0 0 0 2px #2B50E033;}
+  .newprof{display:flex; gap:8px; margin-top:12px;}
+  .newprof input{flex:1; border:1.5px solid var(--line); border-radius:14px; padding:12px; font-size:16px; font-family:var(--font);}
+  .newprof button{background:var(--blue); color:#fff; border:none; border-radius:14px; padding:0 18px; font-weight:700; font-size:15px;}
+  .emoji-row{display:flex; gap:6px; flex-wrap:wrap; margin-top:10px;}
+  .emoji-row button{font-size:22px; background:var(--card); border:1.5px solid var(--line); border-radius:12px; padding:6px 9px;}
+  .emoji-row button.on{border-color:var(--blue); background:#E8EDFC;}
+  .danger{color:var(--red); background:none; border:none; font-size:13px; text-decoration:underline; margin-top:14px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand" id="brandTitle">Huvudräkning<small id="brandSub">deliberate practice</small></div>
+  <div class="hdr-right">
+    <button class="chip" id="langBtn">EN</button>
+    <button class="chip" id="profChip">👤</button>
+  </div>
+</header>
+
+<main>
+  <!-- PROFILES -->
+  <section class="screen" id="scr-profiles">
+    <h2 data-i="whoPractices">Vem tränar?</h2>
+    <div class="prof-list" id="profList"></div>
+    <div class="card" style="margin-top:14px;">
+      <b data-i="newProfile">Ny profil</b>
+      <div class="newprof">
+        <input id="npName" maxlength="14" placeholder="Namn">
+        <button id="npAdd" data-i="add">Lägg till</button>
+      </div>
+      <div class="emoji-row" id="npEmojis"></div>
+    </div>
+  </section>
+
+  <!-- HOME / CONFIG -->
+  <section class="screen" id="scr-home">
+    <h2 id="helloLine">Hej!</h2>
+    <p class="sub" data-i="pickSkill">Välj vad du vill träna på idag.</p>
+    <div class="skill-grid" id="skillGrid"></div>
+
+    <div class="card" id="tablesCard" style="display:none; margin-top:12px;">
+      <b data-i="whichTables">Vilka tabeller?</b>
+      <div class="tables-wrap" id="tablesWrap"></div>
+      <div class="quick-row">
+        <button class="quick" data-upto="5" data-i="upTo5">Upp till 5:an</button>
+        <button class="quick" data-upto="10" data-i="upTo10">Upp till 10:an</button>
+        <button class="quick" data-upto="12" data-i="upTo12">Upp till 12:an</button>
+      </div>
+    </div>
+
+    <button class="start-btn" id="startBtn" data-i="start">Starta · 90 s</button>
+  </section>
+
+  <!-- DRILL -->
+  <section class="screen" id="scr-drill">
+    <div class="drill-meta"><span id="drillSkillLbl"></span><span id="drillCount">0 ✓</span></div>
+    <div class="fuse-track"><div class="fuse" id="fuse"></div></div>
+    <div id="drillZone">
+      <div class="problem" id="problemEl">7 × 8</div>
+      <div class="answer-line" id="answerEl"><span class="caret"></span></div>
+      <div class="tip" id="tipEl"></div>
+    </div>
+    <div class="keypad" id="keypad"></div>
+    <button class="quit" id="quitBtn" data-i="endEarly">Avsluta passet</button>
+  </section>
+
+  <!-- RESULTS -->
+  <section class="screen" id="scr-result">
+    <div class="result-hero">
+      <div class="huge" id="resCorrect">0</div>
+      <div class="lbl" data-i="solved">rätt lösta</div>
+    </div>
+    <div class="stat-row">
+      <div class="stat"><b id="resAcc">–</b><span data-i="accuracy">träffsäkerhet</span></div>
+      <div class="stat"><b id="resAvg">–</b><span data-i="avgTime">snitt/tal</span></div>
+      <div class="stat"><b id="resLvl">–</b><span data-i="level">nivå</span></div>
+    </div>
+    <div class="pb-banner" id="pbBanner">🏅</div>
+    <div class="card" id="missCard" style="margin-top:12px; display:none;">
+      <b data-i="toReview">Att träna extra på</b>
+      <div class="miss-list" id="missList"></div>
+    </div>
+    <button class="start-btn" id="againBtn" data-i="again">En gång till</button>
+    <button class="quit" id="homeBtn" data-i="backHome">Tillbaka</button>
+  </section>
+
+  <!-- PROGRESS -->
+  <section class="screen" id="scr-progress">
+    <h2 data-i="progress">Utveckling</h2>
+    <div class="streak-line">🔥 <span id="streakTxt"></span></div>
+    <div class="prog-tabs" id="progTabs"></div>
+    <div class="card chart-card">
+      <b id="chartTitle"></b>
+      <div id="chartHost" style="margin-top:8px;"></div>
+      <div class="legend">
+        <span><i style="background:var(--blue)"></i><span data-i="legendAcc">Träffsäkerhet %</span></span>
+        <span><i style="background:var(--amber)"></i><span data-i="legendSpeed">Sekunder per tal</span></span>
+      </div>
+    </div>
+    <div class="card" id="masteryCard" style="display:none;">
+      <b data-i="tableMastery">Tabellkoll</b>
+      <div class="mastery" id="masteryGrid"></div>
+    </div>
+    <div class="card">
+      <b data-i="lastSessions">Senaste passen</b>
+      <div id="sessList"></div>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button id="nav-home" class="active" data-i="navPractice">Träna</button>
+  <button id="nav-progress" data-i="navProgress">Utveckling</button>
+  <button id="nav-profiles" data-i="navProfile">Profil</button>
+</nav>
+
+<script>
+"use strict";
+/* ============ storage: Claude artifact (window.storage) or device localStorage ============ */
+const store = {
+  useArtifact: typeof window.storage !== "undefined" && window.storage && typeof window.storage.get === "function",
+  async get(key){
+    if(this.useArtifact){
+      try{ const r = await window.storage.get(key); return r ? JSON.parse(r.value) : null; }
+      catch(e){ return null; }
+    }
+    const v = localStorage.getItem(key);
+    return v ? JSON.parse(v) : null;
+  },
+  async set(key, obj){
+    if(this.useArtifact){
+      try{ await window.storage.set(key, JSON.stringify(obj)); }catch(e){}
+      return;
+    }
+    try{ localStorage.setItem(key, JSON.stringify(obj)); }catch(e){}
+  }
+};
+
+/* ============ i18n ============ */
+const T = {
+  sv:{whoPractices:"Vem tränar?", newProfile:"Ny profil", add:"Lägg till", pickSkill:"Välj vad du vill träna på idag.",
+    whichTables:"Vilka tabeller?", upTo5:"Upp till 5:an", upTo10:"Upp till 10:an", upTo12:"Upp till 12:an",
+    start:"Starta · 90 s", endEarly:"Avsluta passet", solved:"rätt lösta", accuracy:"träffsäkerhet", avgTime:"snitt/tal",
+    level:"nivå", toReview:"Att träna extra på", again:"En gång till", backHome:"Tillbaka",
+    progress:"Utveckling", legendAcc:"Träffsäkerhet %", legendSpeed:"Sekunder per tal", tableMastery:"Tabellkoll",
+    lastSessions:"Senaste passen", navPractice:"Träna", navProgress:"Utveckling", navProfile:"Profil",
+    hello:"Hej", skills:{add:"Addition", sub:"Subtraktion", mul:"Multiplikation", div:"Division", mix:"Blandat"},
+    lvl:"Nivå", tables:"tabeller", noSessions:"Inga pass ännu — kör ett första!", streak1:"dags svit", streakN:"dagars svit",
+    newPB:"Nytt personbästa!", deleteProfile:"Ta bort profil och historik", confirmDelete:"Ta bort profilen och all historik?",
+    day:"pass", correctOf:"rätt av", brandSub:"medveten träning",
+    tipAdd:(a,b)=>`Räkna vänster till höger: ${a}+${b} → ${a}+${Math.floor(b/10)*10}=${a+Math.floor(b/10)*10}, sedan +${b%10}.`,
+    tipSub:(a,b)=>`Runda av: ${a}−${b} → ${a}−${Math.ceil(b/10)*10}=${a-Math.ceil(b/10)*10}, lägg tillbaka ${Math.ceil(b/10)*10-b}.`,
+    tipMul9:(b)=>`9:ans trick: 9×${b} = ${b}0 − ${b} = ${9*b}.`,
+    tipMul5:(b)=>`5:ans trick: 5×${b} = 10×${b} delat med 2 = ${5*b}.`,
+    tipMul:(a,b)=>`Dela upp: ${a}×${b} = ${a}×${b-1} + ${a} = ${a*b}.`,
+    tipDiv:(a,b,c)=>`Tänk baklänges: ${b}×? = ${a}. Svar: ${c}.`},
+  en:{whoPractices:"Who's practicing?", newProfile:"New profile", add:"Add", pickSkill:"Pick what to train today.",
+    whichTables:"Which tables?", upTo5:"Up to 5", upTo10:"Up to 10", upTo12:"Up to 12",
+    start:"Start · 90 s", endEarly:"End session", solved:"solved correctly", accuracy:"accuracy", avgTime:"avg/problem",
+    level:"level", toReview:"Worth extra practice", again:"One more round", backHome:"Back",
+    progress:"Progress", legendAcc:"Accuracy %", legendSpeed:"Seconds per problem", tableMastery:"Table mastery",
+    lastSessions:"Recent sessions", navPractice:"Practice", navProgress:"Progress", navProfile:"Profile",
+    hello:"Hi", skills:{add:"Addition", sub:"Subtraction", mul:"Multiplication", div:"Division", mix:"Mixed"},
+    lvl:"Level", tables:"tables", noSessions:"No sessions yet — do your first!", streak1:"day streak", streakN:"day streak",
+    newPB:"New personal best!", deleteProfile:"Delete profile and history", confirmDelete:"Delete this profile and all its history?",
+    day:"sessions", correctOf:"correct of", brandSub:"deliberate practice",
+    tipAdd:(a,b)=>`Left to right: ${a}+${b} → ${a}+${Math.floor(b/10)*10}=${a+Math.floor(b/10)*10}, then +${b%10}.`,
+    tipSub:(a,b)=>`Round it: ${a}−${b} → ${a}−${Math.ceil(b/10)*10}=${a-Math.ceil(b/10)*10}, add back ${Math.ceil(b/10)*10-b}.`,
+    tipMul9:(b)=>`The 9s trick: 9×${b} = ${b}0 − ${b} = ${9*b}.`,
+    tipMul5:(b)=>`The 5s trick: 5×${b} = 10×${b} halved = ${5*b}.`,
+    tipMul:(a,b)=>`Break it up: ${a}×${b} = ${a}×${b-1} + ${a} = ${a*b}.`,
+    tipDiv:(a,b,c)=>`Think backwards: ${b}×? = ${a}. Answer: ${c}.`}
+};
+let lang = "sv";
+function t(key){ return T[lang][key]; }
+function applyLang(){
+  document.querySelectorAll("[data-i]").forEach(el=>{ const v = T[lang][el.dataset.i]; if(typeof v === "string") el.textContent = v; });
+  document.getElementById("langBtn").textContent = lang === "sv" ? "EN" : "SV";
+  document.getElementById("brandSub").textContent = t("brandSub");
+  renderSkillGrid(); renderHello();
+}
+
+/* ============ app state ============ */
+const SKILLS = ["add","sub","mul","div","mix"];
+const SKILL_ICONS = {add:"➕", sub:"➖", mul:"✖️", div:"➗", mix:"🎲"};
+const EMOJIS = ["🦊","🐯","🦁","🐸","🦄","🐼","🐙","🦈","🚀","⚡","🌟","🏀"];
+const SESSION_SECONDS = 90;
+const MAX_LEVEL = 5;
+
+let profiles = [];         // [{id,name,emoji}]
+let currentProfile = null; // profile object
+let pstate = null;         // {levels:{}, misses:[], config:{skill, tables[]}}
+let sessions = [];         // this profile's session history
+
+function defaultState(){
+  return { levels:{add:1, sub:1, mul:1, div:1, mix:1}, misses:[], config:{skill:"mul", tables:[1,2,3,4,5,6,7,8,9,10]} };
+}
+const key = {
+  profiles: "mm:profiles",
+  lang: "mm:lang",
+  state: id => "mm:state:" + id,
+  sessions: id => "mm:sessions:" + id
+};
+
+async function loadAll(){
+  lang = (await store.get(key.lang)) || "sv";
+  profiles = (await store.get(key.profiles)) || [];
+  applyLang();
+  renderProfiles();
+  if(profiles.length === 0){ show("profiles"); }
+  else { await selectProfile(profiles[0].id, false); show("home"); }
+}
+async function selectProfile(id, save){
+  currentProfile = profiles.find(p=>p.id===id) || null;
+  if(!currentProfile) return;
+  pstate = (await store.get(key.state(id))) || defaultState();
+  sessions = (await store.get(key.sessions(id))) || [];
+  document.getElementById("profChip").textContent = currentProfile.emoji;
+  if(save) await store.set(key.profiles, profiles);
+  renderHello(); renderSkillGrid(); renderProfiles();
+}
+
+/* ============ navigation ============ */
+const screens = ["profiles","home","drill","result","progress"];
+function show(name){
+  screens.forEach(s=>document.getElementById("scr-"+s).classList.toggle("visible", s===name));
+  const navMap = {home:"nav-home", progress:"nav-progress", profiles:"nav-profiles"};
+  document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));
+  if(navMap[name]) document.getElementById(navMap[name]).classList.add("active");
+  if(name==="progress") renderProgress();
+}
+document.getElementById("nav-home").onclick = ()=>{ if(currentProfile) show("home"); else show("profiles"); };
+document.getElementById("nav-progress").onclick = ()=>{ if(currentProfile) show("progress"); else show("profiles"); };
+document.getElementById("nav-profiles").onclick = ()=>show("profiles");
+document.getElementById("langBtn").onclick = async ()=>{ lang = lang==="sv" ? "en" : "sv"; await store.set(key.lang, lang); applyLang(); };
+document.getElementById("profChip").onclick = ()=>show("profiles");
+
+/* ============ profiles ui ============ */
+let npEmoji = EMOJIS[0];
+function renderProfiles(){
+  const list = document.getElementById("profList");
+  list.innerHTML = "";
+  profiles.forEach(p=>{
+    const b = document.createElement("button");
+    b.className = "prof-btn" + (currentProfile && p.id===currentProfile.id ? " current" : "");
+    b.innerHTML = `<span class="em">${p.emoji}</span><span>${escapeHtml(p.name)}</span>`;
+    b.onclick = async ()=>{ await selectProfile(p.id, false); show("home"); };
+    list.appendChild(b);
+  });
+  if(currentProfile){
+    const del = document.createElement("button");
+    del.className = "danger"; del.textContent = t("deleteProfile");
+    del.onclick = async ()=>{
+      if(!confirm(t("confirmDelete"))) return;
+      profiles = profiles.filter(p=>p.id!==currentProfile.id);
+      await store.set(key.profiles, profiles);
+      currentProfile = null; pstate = null; sessions = [];
+      document.getElementById("profChip").textContent = "👤";
+      renderProfiles();
+      if(profiles.length) await selectProfile(profiles[0].id, false);
+    };
+    list.appendChild(del);
+  }
+  const er = document.getElementById("npEmojis");
+  er.innerHTML = "";
+  EMOJIS.forEach(e=>{
+    const b = document.createElement("button");
+    b.textContent = e; b.className = e===npEmoji ? "on" : "";
+    b.onclick = ()=>{ npEmoji = e; renderProfiles(); };
+    er.appendChild(b);
+  });
+}
+document.getElementById("npAdd").onclick = async ()=>{
+  const name = document.getElementById("npName").value.trim();
+  if(!name) return;
+  const p = { id: "p" + Date.now(), name, emoji: npEmoji };
+  profiles.push(p);
+  await store.set(key.profiles, profiles);
+  document.getElementById("npName").value = "";
+  await selectProfile(p.id, false);
+  show("home");
+};
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+/* ============ home / config ============ */
+function renderHello(){
+  if(!currentProfile) return;
+  document.getElementById("helloLine").textContent = `${t("hello")} ${currentProfile.name}! ${currentProfile.emoji}`;
+}
+function renderSkillGrid(){
+  const grid = document.getElementById("skillGrid");
+  if(!pstate){ grid.innerHTML=""; return; }
+  grid.innerHTML = "";
+  SKILLS.forEach(s=>{
+    const b = document.createElement("button");
+    b.className = "skill-btn" + (pstate.config.skill===s ? " selected" : "");
+    const lvlTxt = (s==="mul"||s==="div")
+      ? `${pstate.config.tables.length} ${t("tables")}`
+      : `${t("lvl")} ${pstate.levels[s]}`;
+    b.innerHTML = `<div class="big">${SKILL_ICONS[s]}</div><div class="name">${T[lang].skills[s]}</div><div class="lvl">${lvlTxt}</div>`;
+    b.onclick = ()=>{ pstate.config.skill = s; persistState(); renderSkillGrid(); };
+    grid.appendChild(b);
+  });
+  const showTables = pstate.config.skill==="mul" || pstate.config.skill==="div" || pstate.config.skill==="mix";
+  document.getElementById("tablesCard").style.display = showTables ? "block" : "none";
+  if(showTables) renderTables();
+}
+function renderTables(){
+  const wrap = document.getElementById("tablesWrap");
+  wrap.innerHTML = "";
+  for(let i=1;i<=12;i++){
+    const b = document.createElement("button");
+    b.className = "tbl" + (pstate.config.tables.includes(i) ? " on" : "");
+    b.textContent = i;
+    b.onclick = ()=>{
+      const set = new Set(pstate.config.tables);
+      set.has(i) ? set.delete(i) : set.add(i);
+      pstate.config.tables = [...set].sort((a,b)=>a-b);
+      persistState(); renderTables(); renderStartBtn(); renderSkillGrid();
+    };
+    wrap.appendChild(b);
+  }
+  renderStartBtn();
+}
+document.querySelectorAll(".quick").forEach(q=>{
+  q.onclick = ()=>{
+    const upto = parseInt(q.dataset.upto,10);
+    pstate.config.tables = Array.from({length:upto}, (_,i)=>i+1);
+    persistState(); renderTables(); renderSkillGrid();
+  };
+});
+function renderStartBtn(){
+  const needTables = pstate && (pstate.config.skill==="mul"||pstate.config.skill==="div");
+  document.getElementById("startBtn").disabled = needTables && pstate.config.tables.length===0;
+}
+async function persistState(){ if(currentProfile) await store.set(key.state(currentProfile.id), pstate); }
+
+/* ============ problem generation ============ */
+function ri(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
+function genProblem(skill){
+  if(skill==="mix"){
+    const pool = ["add","sub","mul","div"].filter(s=> s!=="mul" && s!=="div" ? true : pstate.config.tables.length>0);
+    skill = pool[ri(0,pool.length-1)];
+  }
+  // 30% chance: resample a recent miss of this skill
+  const misses = pstate.misses.filter(m=>m.skill===skill);
+  if(misses.length && Math.random()<0.3){
+    const m = misses[ri(0, misses.length-1)];
+    return {skill, a:m.a, b:m.b, op:m.op, ans:m.ans, fromMiss:true};
+  }
+  const L = pstate.levels[skill] || 1;
+  if(skill==="add"){
+    const R = [[1,10],[5,30],[10,99],[25,199],[100,999]][L-1];
+    const a=ri(...R), b=ri(...R);
+    return {skill, a, b, op:"+", ans:a+b};
+  }
+  if(skill==="sub"){
+    const R = [[1,10],[5,30],[10,99],[25,199],[100,999]][L-1];
+    let a=ri(...R), b=ri(...R);
+    if(b>a) [a,b]=[b,a];
+    return {skill, a, b, op:"−", ans:a-b};
+  }
+  if(skill==="mul"){
+    const tbl = pstate.config.tables[ri(0,pstate.config.tables.length-1)];
+    const b = ri(1,10);
+    return Math.random()<0.5 ? {skill, a:tbl, b, op:"×", ans:tbl*b} : {skill, a:b, b:tbl, op:"×", ans:tbl*b};
+  }
+  // div: built from the selected tables so it mirrors multiplication practice
+  const tbl = pstate.config.tables[ri(0,pstate.config.tables.length-1)] || 2;
+  const c = ri(1,10);
+  return {skill:"div", a:tbl*c, b:tbl, op:"÷", ans:c};
+}
+function tipFor(p){
+  if(p.op==="+") return T[lang].tipAdd(p.a,p.b);
+  if(p.op==="−") return T[lang].tipSub(p.a,p.b);
+  if(p.op==="×"){
+    if(p.a===9||p.b===9) return T[lang].tipMul9(p.a===9?p.b:p.a);
+    if(p.a===5||p.b===5) return T[lang].tipMul5(p.a===5?p.b:p.a);
+    return T[lang].tipMul(p.a,p.b);
+  }
+  return T[lang].tipDiv(p.a,p.b,p.ans);
+}
+
+/* ============ drill ============ */
+let drill = null;
+document.getElementById("startBtn").onclick = ()=>startDrill();
+document.getElementById("againBtn").onclick = ()=>startDrill();
+document.getElementById("homeBtn").onclick = ()=>show("home");
+document.getElementById("quitBtn").onclick = ()=>endDrill();
+
+function startDrill(){
+  const skill = pstate.config.skill;
+  drill = {
+    skill, level: pstate.levels[skill],
+    started: Date.now(), timeLeft: SESSION_SECONDS,
+    attempted:0, correct:0, times:[], misses:[],
+    current:null, input:"", locked:false, pStart:0
+  };
+  document.getElementById("drillSkillLbl").textContent =
+    T[lang].skills[skill] + ((skill==="mul"||skill==="div") ? "" : ` · ${t("lvl")} ${drill.level}`);
+  document.getElementById("tipEl").className = "tip";
+  buildKeypad();
+  nextProblem();
+  show("drill");
+  tickFuse(true);
+  drill.timer = setInterval(()=>{
+    drill.timeLeft--;
+    tickFuse(false);
+    if(drill.timeLeft<=0) endDrill();
+  },1000);
+}
+function tickFuse(init){
+  const f = document.getElementById("fuse");
+  const pct = Math.max(0, drill.timeLeft/SESSION_SECONDS*100);
+  if(init){ f.style.transition="none"; f.style.width="100%"; void f.offsetWidth; f.style.transition=""; }
+  f.style.width = pct + "%";
+  f.classList.toggle("low", drill.timeLeft<=15);
+  document.getElementById("drillCount").textContent = `${drill.correct} ✓ · ${drill.timeLeft}s`;
+}
+function nextProblem(){
+  if(!drill) return;
+  drill.current = genProblem(drill.skill);
+  drill.input = "";
+  drill.locked = false;
+  drill.pStart = Date.now();
+  document.getElementById("tipEl").className = "tip";
+  renderProblem();
+}
+function renderProblem(){
+  const p = drill.current;
+  document.getElementById("problemEl").textContent = `${p.a} ${p.op} ${p.b}`;
+  document.getElementById("answerEl").innerHTML = escapeHtml(drill.input) + '<span class="caret"></span>';
+  document.getElementById("drillZone").className = "";
+}
+function buildKeypad(){
+  const kp = document.getElementById("keypad");
+  kp.innerHTML = "";
+  const keys = ["1","2","3","4","5","6","7","8","9","⌫","0","OK"];
+  keys.forEach(k=>{
+    const b = document.createElement("button");
+    b.className = "key" + (k==="OK" ? " ok action" : k==="⌫" ? " action" : "");
+    b.textContent = k;
+    b.onclick = ()=>press(k);
+    kp.appendChild(b);
+  });
+}
+function press(k){
+  if(!drill || drill.locked) return;
+  if(k==="⌫"){ drill.input = drill.input.slice(0,-1); }
+  else if(k==="OK"){ submit(); return; }
+  else if(drill.input.length<5){ drill.input += k; }
+  document.getElementById("answerEl").innerHTML = escapeHtml(drill.input) + '<span class="caret"></span>';
+}
+window.addEventListener("keydown", e=>{
+  if(!document.getElementById("scr-drill").classList.contains("visible")) return;
+  if(e.key>="0" && e.key<="9") press(e.key);
+  else if(e.key==="Backspace") press("⌫");
+  else if(e.key==="Enter") press("OK");
+});
+function submit(){
+  if(drill.input==="" || drill.locked) return;
+  const p = drill.current;
+  const val = parseInt(drill.input,10);
+  const dt = (Date.now()-drill.pStart)/1000;
+  drill.attempted++;
+  drill.locked = true;
+  const zone = document.getElementById("drillZone");
+  if(val===p.ans){
+    drill.correct++;
+    drill.times.push(dt);
+    // clear this problem from stored misses if it was one
+    pstate.misses = pstate.misses.filter(m=>!(m.skill===p.skill && m.a===p.a && m.b===p.b && m.op===p.op));
+    zone.className = "flash-ok";
+    setTimeout(nextProblem, 250);
+  } else {
+    drill.misses.push({a:p.a, b:p.b, op:p.op, ans:p.ans, given:val, skill:p.skill});
+    pstate.misses.push({a:p.a, b:p.b, op:p.op, ans:p.ans, skill:p.skill});
+    if(pstate.misses.length>60) pstate.misses = pstate.misses.slice(-60);
+    zone.className = "flash-bad";
+    document.getElementById("problemEl").textContent = `${p.a} ${p.op} ${p.b} = ${p.ans}`;
+    const tip = document.getElementById("tipEl");
+    tip.textContent = "💡 " + tipFor(p);
+    tip.className = "tip show";
+    setTimeout(nextProblem, 2600);
+  }
+  document.getElementById("drillCount").textContent = `${drill.correct} ✓ · ${drill.timeLeft}s`;
+}
+async function endDrill(){
+  if(!drill) return;
+  clearInterval(drill.timer);
+  const d = drill; drill = null;
+  const acc = d.attempted ? Math.round(d.correct/d.attempted*100) : 0;
+  const avg = d.times.length ? (d.times.reduce((x,y)=>x+y,0)/d.times.length) : 0;
+
+  // adaptive level for add/sub/mix
+  let newLevel = d.level;
+  if(d.skill!=="mul" && d.skill!=="div" && d.attempted>=5){
+    if(acc>=90 && newLevel<MAX_LEVEL) newLevel++;
+    else if(acc<70 && newLevel>1) newLevel--;
+    pstate.levels[d.skill] = newLevel;
+  }
+
+  // personal best: most correct in a session for this skill
+  const prevBest = Math.max(0, ...sessions.filter(s=>s.skill===d.skill).map(s=>s.correct));
+  const isPB = d.correct>0 && d.correct>prevBest;
+
+  const rec = {
+    at: Date.now(), skill: d.skill,
+    level: (d.skill==="mul"||d.skill==="div") ? null : d.level,
+    tables: (d.skill==="mul"||d.skill==="div"||d.skill==="mix") ? [...pstate.config.tables] : null,
+    attempted: d.attempted, correct: d.correct, acc, avg: Math.round(avg*10)/10,
+    misses: d.misses
+  };
+  sessions.push(rec);
+  await store.set(key.sessions(currentProfile.id), sessions);
+  await persistState();
+
+  // render results
+  document.getElementById("resCorrect").textContent = d.correct;
+  document.getElementById("resAcc").textContent = d.attempted ? acc+"%" : "–";
+  document.getElementById("resAvg").textContent = d.times.length ? rec.avg+"s" : "–";
+  document.getElementById("resLvl").textContent = (d.skill==="mul"||d.skill==="div")
+    ? pstate.config.tables.length+" "+t("tables") : newLevel + (newLevel>d.level ? " ↑" : newLevel<d.level ? " ↓" : "");
+  const pb = document.getElementById("pbBanner");
+  pb.style.display = isPB ? "block" : "none";
+  pb.textContent = "🏅 " + t("newPB");
+  const mc = document.getElementById("missCard");
+  const ml = document.getElementById("missList");
+  ml.innerHTML = "";
+  if(d.misses.length){
+    mc.style.display = "block";
+    d.misses.slice(0,8).forEach(m=>{
+      const row = document.createElement("div");
+      row.innerHTML = `<span>${m.a} ${m.op} ${m.b}</span><span><span class="wrong">${isNaN(m.given)?"–":m.given}</span><span class="right">${m.ans}</span></span>`;
+      ml.appendChild(row);
+    });
+  } else mc.style.display = "none";
+  show("result");
+  renderSkillGrid();
+}
+
+/* ============ progress ============ */
+let progSkill = "mul";
+function renderProgress(){
+  // streak
+  const days = new Set(sessions.map(s=>new Date(s.at).toDateString()));
+  let streak = 0;
+  for(let i=0;;i++){
+    const d = new Date(); d.setDate(d.getDate()-i);
+    if(days.has(d.toDateString())) streak++;
+    else if(i===0) continue; // today not yet practiced still keeps streak from yesterday
+    else break;
+  }
+  document.getElementById("streakTxt").textContent = `${streak} ${streak===1?t("streak1"):t("streakN")} · ${sessions.length} ${t("day")}`;
+
+  // tabs
+  const tabs = document.getElementById("progTabs");
+  tabs.innerHTML = "";
+  SKILLS.forEach(s=>{
+    const b = document.createElement("button");
+    b.className = "chip" + (progSkill===s ? " active" : "");
+    b.textContent = T[lang].skills[s];
+    b.onclick = ()=>{ progSkill = s; renderProgress(); };
+    tabs.appendChild(b);
+  });
+
+  const data = sessions.filter(s=>s.skill===progSkill).slice(-14);
+  document.getElementById("chartTitle").textContent = T[lang].skills[progSkill];
+  drawChart(data);
+  renderMastery();
+  renderSessList();
+}
+function drawChart(data){
+  const host = document.getElementById("chartHost");
+  if(data.length<1){ host.innerHTML = `<p class="sub" style="margin:6px 0;">${t("noSessions")}</p>`; return; }
+  const W=480, H=170, P=26;
+  const n = data.length;
+  const x = i => n===1 ? W/2 : P + i*(W-2*P)/(n-1);
+  const maxAvg = Math.max(4, ...data.map(d=>d.avg||0));
+  const yAcc = v => H-P - (v/100)*(H-2*P);
+  const ySpd = v => H-P - (v/maxAvg)*(H-2*P);
+  const accPts = data.map((d,i)=>`${x(i)},${yAcc(d.acc)}`).join(" ");
+  const spdPts = data.map((d,i)=>`${x(i)},${ySpd(d.avg||0)}`).join(" ");
+  const dots = data.map((d,i)=>`<circle cx="${x(i)}" cy="${yAcc(d.acc)}" r="4" fill="#2B50E0"/>`).join("");
+  const dots2 = data.map((d,i)=>`<circle cx="${x(i)}" cy="${ySpd(d.avg||0)}" r="4" fill="#FFC53D"/>`).join("");
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}">
+    <line x1="${P}" y1="${H-P}" x2="${W-P}" y2="${H-P}" stroke="#D8DEE9" stroke-width="1.5"/>
+    <line x1="${P}" y1="${yAcc(100)}" x2="${W-P}" y2="${yAcc(100)}" stroke="#D8DEE9" stroke-dasharray="4 4"/>
+    <text x="${P}" y="${yAcc(100)-6}" font-size="11" fill="#6B7390">100%</text>
+    ${n>1?`<polyline points="${accPts}" fill="none" stroke="#2B50E0" stroke-width="3" stroke-linejoin="round"/>`:""}
+    ${n>1?`<polyline points="${spdPts}" fill="none" stroke="#FFC53D" stroke-width="3" stroke-linejoin="round"/>`:""}
+    ${dots}${dots2}
+  </svg>`;
+}
+function renderMastery(){
+  const card = document.getElementById("masteryCard");
+  if(progSkill!=="mul" && progSkill!=="div"){ card.style.display="none"; return; }
+  // mastery = recent-miss count per table (lower = greener)
+  const recentMisses = pstate.misses.filter(m=>m.op===(progSkill==="mul"?"×":"÷"));
+  const missCount = {};
+  recentMisses.forEach(m=>{
+    const tbl = progSkill==="mul" ? Math.max(m.a,m.b) : m.b;
+    missCount[tbl] = (missCount[tbl]||0)+1;
+  });
+  card.style.display = "block";
+  const grid = document.getElementById("masteryGrid");
+  grid.innerHTML = "";
+  for(let i=1;i<=12;i++){
+    const c = document.createElement("div");
+    const mc = missCount[i]||0;
+    const inScope = pstate.config.tables.includes(i);
+    c.className = "m-cell";
+    if(inScope){
+      c.style.background = mc===0 ? "#D9F2E4" : mc<3 ? "#FFF1CC" : "#FBDCDD";
+      c.style.color = mc===0 ? "#1F7A4D" : mc<3 ? "#8A6A12" : "#B03236";
+    }
+    c.innerHTML = `${i}<small>${inScope ? (mc===0?"✓":mc+"✗") : "·"}</small>`;
+    grid.appendChild(c);
+  }
+}
+function renderSessList(){
+  const host = document.getElementById("sessList");
+  host.innerHTML = "";
+  const data = sessions.slice(-10).reverse();
+  if(!data.length){ host.innerHTML = `<p class="sub" style="margin:6px 0;">${t("noSessions")}</p>`; return; }
+  data.forEach(s=>{
+    const d = new Date(s.at);
+    const when = d.toLocaleDateString(lang==="sv"?"sv-SE":"en-GB",{day:"numeric",month:"short"}) +
+      " " + d.toLocaleTimeString(lang==="sv"?"sv-SE":"en-GB",{hour:"2-digit",minute:"2-digit"});
+    const scope = (s.skill==="mul"||s.skill==="div") && s.tables ? ` · ≤${Math.max(...s.tables)}` : s.level ? ` · ${t("lvl")} ${s.level}` : "";
+    const row = document.createElement("div");
+    row.className = "sess-item";
+    row.innerHTML = `<span>${T[lang].skills[s.skill]}${scope}<br><span class="when">${when}</span></span>
+      <span style="text-align:right; font-variant-numeric:tabular-nums;"><b>${s.correct}</b> ${t("correctOf")} ${s.attempted}<br><span class="when">${s.acc}% · ${s.avg}s</span></span>`;
+    host.appendChild(row);
+  });
+}
+
+loadAll();
+</script>
+</body>
+</html>

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Huvudräkning</title>
+<meta name="description" content="Träna huvudräkning – medveten träning för hela familjen.">
+<meta name="theme-color" content="#2B50E0">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Huvudräkning">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header>
+  <div class="brand" id="brandTitle">Huvudräkning<small id="brandSub">medveten träning</small></div>
+  <div class="hdr-right">
+    <button class="chip" id="langBtn">EN</button>
+    <button class="chip" id="profChip">👤</button>
+  </div>
+</header>
+
+<main>
+  <!-- PROFILES -->
+  <section class="screen" id="scr-profiles">
+    <h2 data-i="whoPractices">Vem tränar?</h2>
+    <div class="prof-list" id="profList"></div>
+    <div class="card" style="margin-top:14px;">
+      <b data-i="newProfile">Ny profil</b>
+      <div class="newprof">
+        <input id="npName" maxlength="14" placeholder="Namn" data-i-ph="namePh">
+        <button id="npAdd" data-i="add">Lägg till</button>
+      </div>
+      <div class="emoji-row" id="npEmojis"></div>
+    </div>
+    <div class="card">
+      <b data-i="moveData">Flytta data</b>
+      <div class="io-row">
+        <button id="exportBtn" data-i="exportProfile">Exportera profil</button>
+        <button id="importBtn" data-i="importProfile">Importera profil</button>
+      </div>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+    </div>
+  </section>
+
+  <!-- HOME / CONFIG -->
+  <section class="screen" id="scr-home">
+    <h2 id="helloLine">Hej!</h2>
+    <p class="sub" data-i="pickSkill">Välj vad du vill träna på idag.</p>
+    <div class="skill-grid" id="skillGrid"></div>
+
+    <div class="card" id="tablesCard" style="display:none; margin-top:12px;">
+      <b data-i="whichTables">Vilka tabeller?</b>
+      <div class="tables-wrap" id="tablesWrap"></div>
+      <div class="quick-row">
+        <button class="quick" data-upto="5" data-i="upTo5">Upp till 5:an</button>
+        <button class="quick" data-upto="10" data-i="upTo10">Upp till 10:an</button>
+        <button class="quick" data-upto="12" data-i="upTo12">Upp till 12:an</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <b data-i="sessionLength">Passlängd</b>
+      <div class="quick-row" id="durRow"></div>
+    </div>
+
+    <button class="start-btn" id="startBtn">Starta · 90 s</button>
+  </section>
+
+  <!-- DRILL -->
+  <section class="screen" id="scr-drill">
+    <div class="drill-meta"><span id="drillSkillLbl"></span><span id="drillCount">0 ✓</span></div>
+    <div class="fuse-track"><div class="fuse" id="fuse"></div></div>
+    <div id="drillZone">
+      <div class="problem" id="problemEl">7 × 8</div>
+      <div class="answer-line" id="answerEl"><span class="caret"></span></div>
+      <div class="tip" id="tipEl"></div>
+    </div>
+    <div class="keypad" id="keypad"></div>
+    <button class="quit" id="quitBtn" data-i="endEarly">Avsluta passet</button>
+  </section>
+
+  <!-- RESULTS -->
+  <section class="screen" id="scr-result">
+    <div class="result-hero">
+      <div class="huge" id="resCorrect">0</div>
+      <div class="lbl" data-i="solved">rätt lösta</div>
+    </div>
+    <div class="stat-row">
+      <div class="stat"><b id="resAcc">–</b><span data-i="accuracy">träffsäkerhet</span></div>
+      <div class="stat"><b id="resAvg">–</b><span data-i="avgTime">snitt/tal</span></div>
+      <div class="stat"><b id="resLvl">–</b><span data-i="level">nivå</span></div>
+    </div>
+    <div class="pb-banner" id="pbBanner">🏅</div>
+    <div class="card" id="missCard" style="margin-top:12px; display:none;">
+      <b data-i="toReview">Att träna extra på</b>
+      <div class="miss-list" id="missList"></div>
+    </div>
+    <button class="start-btn" id="againBtn" data-i="again">En gång till</button>
+    <button class="quit" id="homeBtn" data-i="backHome">Tillbaka</button>
+  </section>
+
+  <!-- PROGRESS -->
+  <section class="screen" id="scr-progress">
+    <h2 data-i="progress">Utveckling</h2>
+    <div class="streak-line">🔥 <span id="streakTxt"></span></div>
+    <div class="prog-tabs" id="progTabs"></div>
+    <div class="card chart-card">
+      <b id="chartTitle"></b>
+      <div class="pb-line" id="pbLine"></div>
+      <div id="chartHost" style="margin-top:8px;"></div>
+      <div class="legend">
+        <span><i style="background:var(--blue)"></i><span data-i="legendAcc">Träffsäkerhet %</span></span>
+        <span><i style="background:var(--amber)"></i><span data-i="legendSpeed">Sekunder per tal</span></span>
+      </div>
+    </div>
+    <div class="card" id="tnCard" style="display:none;">
+      <b data-i="thenVsNow">Då vs nu</b>
+      <div id="tnGrid"></div>
+    </div>
+    <div class="card" id="masteryCard" style="display:none;">
+      <b data-i="tableMastery">Tabellkoll</b>
+      <div class="mastery" id="masteryGrid"></div>
+    </div>
+    <div class="card">
+      <b data-i="lastSessions">Senaste passen</b>
+      <div id="sessList"></div>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button id="nav-home" class="active" data-i="navPractice">Träna</button>
+  <button id="nav-progress" data-i="navProgress">Utveckling</button>
+  <button id="nav-profiles" data-i="navProfile">Profil</button>
+</nav>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
