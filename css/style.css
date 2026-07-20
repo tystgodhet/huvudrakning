@@ -71,6 +71,41 @@ h2{font-size:22px; margin:14px 0 10px; letter-spacing:-0.02em;}
 .tip{background:#FFF6DE; border:1.5px solid #F1D998; border-radius:14px; padding:10px 14px; font-size:14px; margin:10px 0 0; display:none;}
 .tip.show{display:block;}
 
+.fb-chip{font-variant-numeric:tabular-nums; font-size:14px; font-weight:700;}
+.fb-chip.ok{color:var(--green);}
+.fb-chip.bad{color:var(--red);}
+
+/* mastery ladder */
+.ladder-row{display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-bottom:1px solid var(--line);}
+.ladder-row:last-child{border-bottom:none; padding-bottom:2px;}
+.ladder-row .ladder-ic{width:22px; text-align:center; flex:none;}
+.ladder-row.done .ladder-ic{color:var(--green); font-weight:700;}
+.ladder-row.done .ladder-name{color:var(--muted);}
+.ladder-row.current .ladder-name{font-weight:700;}
+.ladder-row.current .ladder-ic{color:var(--blue);}
+.ladder-row.locked{opacity:.45;}
+.ladder-body{display:flex; flex-direction:column; gap:2px; min-width:0;}
+.ladder-progress{font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums;}
+
+/* mastery heatmap */
+.hm{display:grid; grid-template-columns:auto repeat(10,1fr); gap:3px; margin-top:10px; align-items:center;}
+.hm i{display:block; font-style:normal;}
+.hm-lbl{font-size:10px; color:var(--muted); text-align:center; font-variant-numeric:tabular-nums;}
+.hm-cell{aspect-ratio:1; border-radius:4px;}
+.hm-green{background:#3FB77E;}
+.hm-yellow{background:#FFC53D;}
+.hm-red{background:#EE7A7E;}
+.hm-gray{background:#E4E8F1;}
+.hm-cap{font-size:12px; color:var(--muted); margin-top:12px;}
+.hm-squares{display:grid; grid-template-columns:repeat(8,1fr); gap:3px; margin-top:6px;}
+.hm-sq{aspect-ratio:1; border-radius:4px; font-style:normal; display:flex; align-items:center; justify-content:center;
+  font-size:10px; font-weight:700; color:#fff; font-variant-numeric:tabular-nums;}
+.hm-sq.hm-gray{color:var(--muted);}
+.hm-legend{display:flex; flex-wrap:wrap; gap:10px 14px; margin-top:12px; font-size:11px; color:var(--muted);}
+.hm-legend span{display:flex; align-items:center; gap:5px;}
+.hm-legend .hm-cell{width:11px; height:11px; aspect-ratio:auto;}
+.slow-t{color:#8A6A12; font-weight:700; font-variant-numeric:tabular-nums;}
+
 .keypad{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:18px;}
 .key{background:var(--card); border:1.5px solid var(--line); border-radius:16px; font-size:26px; font-weight:700; padding:16px 0;}
 .key:active{background:#E8EDFC;}

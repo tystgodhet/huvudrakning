@@ -17,8 +17,24 @@ served as static files. UI is Swedish by default with an English toggle.
   two-year compounding, and break-even after a drawdown, with adaptive
   levels 1–5 and technique tips (e.g. "the climb back is measured on what's
   left")
+- **Multiplication mastery ladder**: six named levels (tables to 5/10/12,
+  two-digit × one-digit, squares to 25², two-digit × two-digit), next level
+  shown locked. Promotion rewards mastery — ≥95 % accuracy AND median
+  ≤3 s/problem over the last 3 sessions — with live progress toward both
+  bars ("96 % ✓ · 3,4 s av 3,0 s"). Two sessions in a row below 80 %
+  quietly mixes in 30 % problems from the level below; the visible level
+  never moves down. No play-time rewards, no dark patterns.
+- **Weighted practice**: every fact carries a weight (wrong ×3, slow ×2,
+  fast correct ×0.7, floor 0.3) that drives both problem sampling and the
+  "worth extra practice" list
+- **Mastery heatmap**: per-table grid where each fact is green
+  (fast + correct), yellow (correct but slow), red (missed), gray
+  (untrained) — plus a squares strip once that level is unlocked
+- **Instant feedback** on every answer (right/wrong + time) and a session
+  summary compared against the player's own average, never against other
+  profiles
 - **Scope per session**: individual tables 1–12 (or "upp till 10:an"-style
-  shortcuts) for ×/÷; difficulty levels 1–5 for +/− controlling number ranges
+  shortcuts) for ÷; difficulty levels 1–5 for +/− controlling number ranges
 - **Timed drills**: 60/90/120 s (default 90), on-screen keypad, hardware
   keyboard also works
 - **Adaptive levels** for +/−/investing: after a session with ≥5 attempts,

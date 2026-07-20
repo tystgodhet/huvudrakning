@@ -3,8 +3,20 @@
 
 import { keys, load, save, remove, exportProfile, parseImport } from "./storage.js";
 import { T, tipText, problemText } from "./i18n.js";
-import { generateProblem, tipFor } from "./problems.js";
+import { generateProblem, generateLadderProblem, tipFor } from "./problems.js";
 import { nextLevel, isAdaptiveSkill } from "./adaptive.js";
+import {
+  LADDER_LEVELS,
+  PROMO_ACC,
+  PROMO_MEDIAN,
+  PROMO_WINDOW,
+  factKey,
+  factState,
+  median,
+  promotionStatus,
+  slumpActive,
+  updateWeight,
+} from "./ladder.js";
 import { dayStreak, personalBest, thenVsNow, masteryByTable } from "./stats.js";
 import { sessionChartSVG } from "./charts.js";
 
@@ -36,6 +48,7 @@ function t(key) {
 function defaultState() {
   return {
     levels: { add: 1, sub: 1, invest: 1 },
+    ladder: { level: 1, facts: {} },
     misses: [],
     config: { skill: "mul", tables: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], duration: DEFAULT_DURATION },
   };
@@ -45,9 +58,23 @@ function normalizeState(s) {
   const d = defaultState();
   return {
     levels: { ...d.levels, ...(s?.levels || {}) },
+    ladder: {
+      level: Math.min(Math.max(s?.ladder?.level || 1, 1), LADDER_LEVELS),
+      facts: s?.ladder?.facts && typeof s.ladder.facts === "object" ? s.ladder.facts : {},
+    },
     misses: Array.isArray(s?.misses) ? s.misses.slice(-MISS_CAP) : [],
     config: { ...d.config, ...(s?.config || {}) },
   };
+}
+
+function fmtNum(x) {
+  const s = String(Math.round(x * 10) / 10);
+  return lang === "sv" ? s.replace(".", ",") : s;
+}
+
+function fmtSec(x) {
+  const s = (Math.round(x * 10) / 10).toFixed(1);
+  return (lang === "sv" ? s.replace(".", ",") : s) + " s";
 }
 
 function escapeHtml(s) {
@@ -215,7 +242,8 @@ function renderSkillGrid() {
     const b = document.createElement("button");
     b.className = "skill-btn" + (pstate.config.skill === s ? " selected" : "");
     let lvlTxt;
-    if (s === "mul" || s === "div") lvlTxt = `${pstate.config.tables.length} ${t("tables")}`;
+    if (s === "mul") lvlTxt = `${t("lvl")} ${pstate.ladder.level}/${LADDER_LEVELS}`;
+    else if (s === "div") lvlTxt = `${pstate.config.tables.length} ${t("tables")}`;
     else if (s === "mix") lvlTxt = `${t("lvl")} ${pstate.levels.add}/${pstate.levels.sub}`;
     else lvlTxt = `${t("lvl")} ${pstate.levels[s]}`;
     b.innerHTML = `<div class="big">${SKILL_ICONS[s]}</div><div class="name">${T[lang].skills[s]}</div><div class="lvl">${lvlTxt}</div>`;
@@ -226,9 +254,49 @@ function renderSkillGrid() {
     };
     grid.appendChild(b);
   });
-  const showTables = ["mul", "div", "mix"].includes(pstate.config.skill);
+  const showTables = ["div", "mix"].includes(pstate.config.skill);
   $("tablesCard").style.display = showTables ? "block" : "none";
   if (showTables) renderTables();
+  const showLadder = pstate.config.skill === "mul";
+  $("ladderCard").style.display = showLadder ? "block" : "none";
+  if (showLadder) renderLadder();
+}
+
+/* Named mastery ladder: completed levels checked, current highlighted with
+   live progress toward both promotion bars, upcoming levels locked. */
+function renderLadder() {
+  const host = $("ladderList");
+  host.innerHTML = "";
+  const cur = pstate.ladder.level;
+  const names = T[lang].ladderNames;
+  for (let i = 1; i <= LADDER_LEVELS; i++) {
+    const row = document.createElement("div");
+    row.className = "ladder-row" + (i === cur ? " current" : i > cur ? " locked" : " done");
+    const icon = i < cur ? "✓" : i === cur ? "▶" : "🔒";
+    let html = `<span class="ladder-ic">${icon}</span><div class="ladder-body"><span class="ladder-name">${names[i - 1]}</span>`;
+    if (i === cur) {
+      const st = promotionStatus(sessions, cur);
+      const accTxt =
+        st.acc === null
+          ? `– ${t("ofTarget")} ${PROMO_ACC} %`
+          : st.accOk
+            ? `${fmtNum(st.acc)} % ✓`
+            : `${fmtNum(st.acc)} % ${t("ofTarget")} ${PROMO_ACC} %`;
+      const medTxt =
+        st.med === null
+          ? `– ${t("ofTarget")} ${fmtSec(PROMO_MEDIAN)}`
+          : st.medOk
+            ? `${fmtSec(st.med)} ✓`
+            : `${fmtSec(st.med)} ${t("ofTarget")} ${fmtSec(PROMO_MEDIAN)}`;
+      let line = `${accTxt} · ${medTxt}`;
+      if (st.count < PROMO_WINDOW) line += ` · ${t("passCount")(st.count, PROMO_WINDOW)}`;
+      if (cur === LADDER_LEVELS && st.accOk && st.medOk) line = `🏆 ${t("ladderDone")}`;
+      html += `<span class="ladder-progress">${line}</span>`;
+    }
+    html += "</div>";
+    row.innerHTML = html;
+    host.appendChild(row);
+  }
 }
 
 function renderTables() {
@@ -279,7 +347,7 @@ function renderDurations() {
 function renderStartBtn() {
   const btn = $("startBtn");
   if (!pstate) return;
-  const needTables = pstate.config.skill === "mul" || pstate.config.skill === "div";
+  const needTables = pstate.config.skill === "div";
   btn.disabled = needTables && pstate.config.tables.length === 0;
   btn.textContent = `${t("start")} · ${pstate.config.duration} s`;
 }
@@ -297,6 +365,8 @@ function startDrill() {
   drill = {
     skill,
     level: isAdaptiveSkill(skill) ? pstate.levels[skill] : null,
+    ladderLevel: skill === "mul" ? pstate.ladder.level : null,
+    slump: skill === "mul" ? slumpActive(sessions, pstate.ladder.level) : false,
     duration,
     deadline: Date.now() + duration * 1000,
     attempted: 0,
@@ -311,7 +381,10 @@ function startDrill() {
     feedbackTimeout: null,
   };
   $("drillSkillLbl").textContent =
-    T[lang].skills[skill] + (isAdaptiveSkill(skill) ? ` · ${t("lvl")} ${drill.level}` : "");
+    skill === "mul"
+      ? T[lang].ladderNames[drill.ladderLevel - 1]
+      : T[lang].skills[skill] + (isAdaptiveSkill(skill) ? ` · ${t("lvl")} ${drill.level}` : "");
+  $("fbChip").textContent = "";
   $("tipEl").className = "tip";
   buildKeypad();
   nextProblem();
@@ -346,12 +419,15 @@ function tickDrill() {
 
 function nextProblem() {
   if (!drill) return;
-  drill.current = generateProblem({
-    skill: drill.skill,
-    levels: pstate.levels,
-    tables: pstate.config.tables,
-    misses: pstate.misses,
-  });
+  drill.current =
+    drill.skill === "mul"
+      ? generateLadderProblem({ level: drill.ladderLevel, facts: pstate.ladder.facts, slump: drill.slump })
+      : generateProblem({
+          skill: drill.skill,
+          levels: pstate.levels,
+          tables: pstate.config.tables,
+          misses: pstate.misses,
+        });
   drill.input = "";
   drill.locked = false;
   drill.pStart = Date.now();
@@ -404,8 +480,19 @@ function submit() {
   const dt = (Date.now() - drill.pStart) / 1000;
   drill.attempted++;
   drill.locked = true;
+  const ok = val === p.ans;
+  // instant feedback: right/wrong + time, always against the clock, never a sound
+  const fb = $("fbChip");
+  fb.textContent = (ok ? "✓ " : "✗ ") + fmtSec(dt);
+  fb.className = "fb-chip " + (ok ? "ok" : "bad");
+  // ladder practice weights: wrong ×3, slow ×2, fast correct ×0.7
+  if (drill.skill === "mul") {
+    const k = factKey(p.a, p.b);
+    const prev = pstate.ladder.facts[k];
+    pstate.ladder.facts[k] = { w: updateWeight(prev && prev.w, ok, dt), ok, t: Math.round(dt * 10) / 10 };
+  }
   const zone = $("drillZone");
-  if (val === p.ans) {
+  if (ok) {
     drill.correct++;
     drill.times.push(dt);
     // a miss is cleared once answered correctly
@@ -450,31 +537,91 @@ function endDrill() {
     at: Date.now(),
     skill: d.skill,
     level: isAdaptiveSkill(d.skill) ? d.level : null,
-    tables: ["mul", "div", "mix"].includes(d.skill) ? [...pstate.config.tables] : null,
+    ladder: d.skill === "mul" ? d.ladderLevel : null,
+    tables: ["div", "mix"].includes(d.skill) ? [...pstate.config.tables] : null,
     duration: d.duration,
     attempted: d.attempted,
     correct: d.correct,
     acc,
     avg: Math.round(avg * 10) / 10,
+    med: d.times.length ? Math.round(median(d.times) * 10) / 10 : null,
     misses: d.misses,
   };
   sessions.push(rec); // append-only, never overwrite
+
+  // ladder promotion: mastery over the last PROMO_WINDOW sessions
+  let promotedTo = null;
+  let ladderMastered = false;
+  if (d.skill === "mul") {
+    const st = promotionStatus(sessions, d.ladderLevel);
+    if (st.ready) {
+      promotedTo = d.ladderLevel + 1;
+      pstate.ladder.level = promotedTo;
+    } else if (d.ladderLevel === LADDER_LEVELS && st.accOk && st.medOk) ladderMastered = true;
+  }
+
   save(keys.sessions(currentProfile.id), sessions);
   persistState();
 
   $("resCorrect").textContent = d.correct;
   $("resAcc").textContent = d.attempted ? acc + "%" : "–";
   $("resAvg").textContent = d.times.length ? rec.avg + "s" : "–";
-  $("resLvl").textContent = isAdaptiveSkill(d.skill)
-    ? newLevel + (newLevel > d.level ? " ↑" : newLevel < d.level ? " ↓" : "")
-    : pstate.config.tables.length + " " + t("tables");
+  $("resLvl").textContent =
+    d.skill === "mul"
+      ? `${d.ladderLevel}/${LADDER_LEVELS}` + (promotedTo ? " ↑" : "")
+      : isAdaptiveSkill(d.skill)
+        ? newLevel + (newLevel > d.level ? " ↑" : newLevel < d.level ? " ↓" : "")
+        : pstate.config.tables.length + " " + t("tables");
   const pb = $("pbBanner");
   pb.style.display = isPB ? "block" : "none";
   pb.textContent = "🏅 " + t("newPB");
+  const promo = $("promoBanner");
+  promo.style.display = promotedTo || ladderMastered ? "block" : "none";
+  promo.textContent = promotedTo
+    ? `🔓 ${t("unlocked")} ${T[lang].ladderNames[promotedTo - 1]}`
+    : `🏆 ${t("ladderDone")}`;
 
+  // session summary vs the player's OWN average — never vs other profiles
+  const vs = $("vsAvg");
+  const prior = sessions.slice(0, -1).filter((s) => s.skill === d.skill);
+  const priorSpd = prior.filter((s) => s.avg > 0);
+  if (prior.length && d.attempted && d.times.length && priorSpd.length) {
+    const accAvg = Math.round(prior.reduce((n, s) => n + s.acc, 0) / prior.length);
+    const spdAvg = priorSpd.reduce((n, s) => n + s.avg, 0) / priorSpd.length;
+    vs.style.display = "block";
+    vs.textContent = "📊 " + t("vsAvg")({ acc: acc, accAvg, spd: fmtSec(rec.avg), spdAvg: fmtSec(spdAvg) });
+  } else vs.style.display = "none";
+
+  renderReviewList(d);
+  show("result");
+  renderHome();
+}
+
+/* "Worth extra practice": for the ladder it is driven by the practice
+   weights (highest first); other skills list this session's misses. */
+function renderReviewList(d) {
   const mc = $("missCard");
   const ml = $("missList");
   ml.innerHTML = "";
+  if (d.skill === "mul") {
+    const top = Object.entries(pstate.ladder.facts)
+      .filter(([, f]) => f.w > 1)
+      .sort((x, y) => y[1].w - x[1].w)
+      .slice(0, 8);
+    if (!top.length) {
+      mc.style.display = "none";
+      return;
+    }
+    mc.style.display = "block";
+    top.forEach(([k, f]) => {
+      const [a, b] = k.split("x");
+      const row = document.createElement("div");
+      const status = f.ok ? `<span class="slow-t">${fmtSec(f.t)}</span>` : `<span class="wrong">✗</span>`;
+      row.innerHTML = `<span>${a} × ${b}</span><span>${status}<span class="right">${a * b}</span></span>`;
+      ml.appendChild(row);
+    });
+    return;
+  }
   if (d.misses.length) {
     mc.style.display = "block";
     d.misses.slice(0, 8).forEach((m) => {
@@ -483,9 +630,6 @@ function endDrill() {
       ml.appendChild(row);
     });
   } else mc.style.display = "none";
-
-  show("result");
-  renderHome();
 }
 
 /* ============ progress ============ */
@@ -548,14 +692,23 @@ function renderThenNow() {
 
 function renderMastery() {
   const card = $("masteryCard");
+  const host = $("masteryHost");
   if (progSkill !== "mul" && progSkill !== "div") {
     card.style.display = "none";
     return;
   }
   card.style.display = "block";
-  const counts = masteryByTable(pstate ? pstate.misses : [], progSkill === "mul" ? "×" : "÷");
-  const grid = $("masteryGrid");
-  grid.innerHTML = "";
+  host.innerHTML = "";
+
+  if (progSkill === "mul") {
+    renderHeatmap(host);
+    return;
+  }
+
+  // division keeps the per-table miss overview
+  const counts = masteryByTable(pstate ? pstate.misses : [], "÷");
+  const grid = document.createElement("div");
+  grid.className = "mastery";
   for (let i = 1; i <= 12; i++) {
     const c = document.createElement("div");
     const mc = counts[i] || 0;
@@ -568,6 +721,64 @@ function renderMastery() {
     c.innerHTML = `${i}<small>${inScope ? (mc === 0 ? "✓" : mc + "✗") : "·"}</small>`;
     grid.appendChild(c);
   }
+  host.appendChild(grid);
+}
+
+/* Mastery heatmap: one cell per fact. Green = fast + correct, yellow =
+   correct but slow, red = missed last time, gray = not practiced yet. */
+function renderHeatmap(host) {
+  const facts = pstate ? pstate.ladder.facts : {};
+  const grid = document.createElement("div");
+  grid.className = "hm";
+  grid.appendChild(document.createElement("i")); // corner
+  for (let f = 1; f <= 10; f++) {
+    const h = document.createElement("i");
+    h.className = "hm-lbl";
+    h.textContent = f;
+    grid.appendChild(h);
+  }
+  for (let tbl = 1; tbl <= 12; tbl++) {
+    const lbl = document.createElement("i");
+    lbl.className = "hm-lbl";
+    lbl.textContent = tbl;
+    grid.appendChild(lbl);
+    for (let f = 1; f <= 10; f++) {
+      const c = document.createElement("i");
+      c.className = "hm-cell hm-" + factState(facts[factKey(tbl, f)]);
+      c.title = `${tbl} × ${f}`;
+      grid.appendChild(c);
+    }
+  }
+  host.appendChild(grid);
+
+  // squares strip once that level is in reach
+  const anySquare = Array.from({ length: 15 }, (_, i) => i + 11).some((n) => facts[factKey(n, n)]);
+  if ((pstate && pstate.ladder.level >= 5) || anySquare) {
+    const cap = document.createElement("div");
+    cap.className = "hm-cap";
+    cap.textContent = t("squaresLbl") + " 11–25";
+    host.appendChild(cap);
+    const sq = document.createElement("div");
+    sq.className = "hm-squares";
+    for (let n = 11; n <= 25; n++) {
+      const c = document.createElement("i");
+      c.className = "hm-sq hm-" + factState(facts[factKey(n, n)]);
+      c.textContent = n;
+      c.title = `${n} × ${n}`;
+      sq.appendChild(c);
+    }
+    host.appendChild(sq);
+  }
+
+  const leg = document.createElement("div");
+  leg.className = "hm-legend";
+  leg.innerHTML = [
+    `<span><i class="hm-cell hm-green"></i>${t("hmFast")}</span>`,
+    `<span><i class="hm-cell hm-yellow"></i>${t("hmSlow")}</span>`,
+    `<span><i class="hm-cell hm-red"></i>${t("hmWrong")}</span>`,
+    `<span><i class="hm-cell hm-gray"></i>${t("hmNew")}</span>`,
+  ].join("");
+  host.appendChild(leg);
 }
 
 function renderSessList() {
@@ -586,7 +797,13 @@ function renderSessList() {
       " " +
       d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
     const scope =
-      s.tables && s.tables.length ? ` · ≤${Math.max(...s.tables)}` : s.level ? ` · ${t("lvl")} ${s.level}` : "";
+      s.tables && s.tables.length
+        ? ` · ≤${Math.max(...s.tables)}`
+        : s.ladder
+          ? ` · ${t("lvl")} ${s.ladder}`
+          : s.level
+            ? ` · ${t("lvl")} ${s.level}`
+            : "";
     const row = document.createElement("div");
     row.className = "sess-item";
     row.innerHTML = `<span>${T[lang].skills[s.skill]}${scope}<br><span class="when">${when}</span></span>
