@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateProblem, tipFor, LEVEL_RANGES } from "../js/problems.js";
+import { generateProblem, tipFor, LEVEL_RANGES, INVEST_LEVEL_KINDS } from "../js/problems.js";
 
 // deterministic rng (mulberry32)
 function seeded(seed) {
@@ -96,6 +96,63 @@ test("misses from another skill are not resampled", () => {
   const rng = () => 0.0; // would always resample if eligible
   const p = generateProblem({ skill: "mul", tables: [2], misses, rng });
   assert.equal(p.fromMiss, false);
+});
+
+test("invest problems draw from the level's kinds and have positive integer answers", () => {
+  for (let level = 1; level <= 5; level++) {
+    const rng = seeded(level * 11);
+    const allowed = INVEST_LEVEL_KINDS[level - 1];
+    for (let i = 0; i < 300; i++) {
+      const p = generateProblem({ skill: "invest", levels: { invest: level }, rng });
+      assert.equal(p.skill, "invest");
+      const base = p.op.replace(/(Up|Down)$/, "");
+      assert.ok(allowed.includes(base) || allowed.includes("invChange"), `${p.op} not allowed at level ${level}`);
+      assert.ok(Number.isInteger(p.ans) && p.ans > 0, `non-integer/negative answer ${p.ans} for ${p.op}`);
+      assert.ok(String(p.ans).length <= 5, `answer ${p.ans} does not fit the keypad`);
+    }
+  }
+});
+
+test("invest answers satisfy each kind's defining relation", () => {
+  const rng = seeded(101);
+  for (let level = 1; level <= 5; level++) {
+    for (let i = 0; i < 300; i++) {
+      const p = generateProblem({ skill: "invest", levels: { invest: level }, rng });
+      const { a, b, op, ans } = p;
+      if (op === "invPercentOf") assert.equal(ans * 100, a * b);
+      else if (op === "invChangeUp") assert.equal(ans * a, (b - a) * 100);
+      else if (op === "invChangeDown") assert.equal(ans * a, (a - b) * 100);
+      else if (op === "invRule72Years" || op === "invRule72Rate") assert.equal(ans * b, 72);
+      else if (op === "invYield") assert.equal(ans * b, a * 100);
+      else if (op === "invPE") assert.equal(ans * b, a);
+      else if (op === "invCompound") assert.equal(ans * 10000, a * (100 + b) * (100 + b));
+      else if (op === "invBreakEven") assert.equal(ans * (100 - a), 100 * a);
+      else assert.fail(`unknown invest kind ${op}`);
+    }
+  }
+});
+
+test("invest misses resample with the kind preserved", () => {
+  const misses = [{ skill: "invest", a: 80, b: 100, op: "invChangeUp", ans: 25 }];
+  let calls = 0;
+  const lowRng = () => [0.1, 0.0][calls++ % 2];
+  const p = generateProblem({ skill: "invest", levels: { invest: 3 }, misses, rng: lowRng });
+  assert.equal(p.fromMiss, true);
+  assert.equal(p.op, "invChangeUp");
+  assert.deepEqual([p.a, p.b, p.ans], [80, 100, 25]);
+});
+
+test("invest tips are computed from the problem's numbers", () => {
+  const c = tipFor({ op: "invCompound", a: 100, b: 10, ans: 121 });
+  assert.equal(c.kind, "invCompound");
+  assert.equal(c.mid, 110);
+  const po = tipFor({ op: "invPercentOf", a: 15, b: 200, ans: 30 });
+  assert.equal(po.tenth, 20);
+  const be = tipFor({ op: "invBreakEven", a: 50, b: 50, ans: 100 });
+  assert.equal(be.left, 50);
+  const y = tipFor({ op: "invYield", a: 12, b: 300, ans: 4 });
+  assert.equal(y.onePct, 3);
+  assert.equal(tipFor({ op: "invChangeDown", a: 100, b: 75, ans: 25 }).diff, 25);
 });
 
 test("tip selection picks the right technique", () => {

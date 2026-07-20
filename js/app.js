@@ -2,7 +2,7 @@
    All pure logic lives in problems/adaptive/stats; this file owns the DOM. */
 
 import { keys, load, save, remove, exportProfile, parseImport } from "./storage.js";
-import { T, tipText } from "./i18n.js";
+import { T, tipText, problemText } from "./i18n.js";
 import { generateProblem, tipFor } from "./problems.js";
 import { nextLevel, isAdaptiveSkill } from "./adaptive.js";
 import { dayStreak, personalBest, thenVsNow, masteryByTable } from "./stats.js";
@@ -10,8 +10,8 @@ import { sessionChartSVG } from "./charts.js";
 
 const $ = (id) => document.getElementById(id);
 
-const SKILLS = ["add", "sub", "mul", "div", "mix"];
-const SKILL_ICONS = { add: "➕", sub: "➖", mul: "✖️", div: "➗", mix: "🎲" };
+const SKILLS = ["add", "sub", "mul", "div", "invest", "mix"];
+const SKILL_ICONS = { add: "➕", sub: "➖", mul: "✖️", div: "➗", invest: "📈", mix: "🎲" };
 const EMOJIS = ["🦊", "🐯", "🦁", "🐸", "🦄", "🐼", "🐙", "🦈", "🚀", "⚡", "🌟", "🏀"];
 const DURATIONS = [60, 90, 120];
 const DEFAULT_DURATION = 90;
@@ -35,7 +35,7 @@ function t(key) {
 
 function defaultState() {
   return {
-    levels: { add: 1, sub: 1 },
+    levels: { add: 1, sub: 1, invest: 1 },
     misses: [],
     config: { skill: "mul", tables: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], duration: DEFAULT_DURATION },
   };
@@ -357,7 +357,9 @@ function nextProblem() {
   drill.pStart = Date.now();
   $("tipEl").className = "tip";
   const p = drill.current;
-  $("problemEl").textContent = `${p.a} ${p.op} ${p.b}`;
+  const el = $("problemEl");
+  el.classList.toggle("long", p.skill === "invest");
+  el.textContent = problemText(lang, p);
   renderInput();
   $("drillZone").className = "";
 }
@@ -415,7 +417,7 @@ function submit() {
     pstate.misses.push({ a: p.a, b: p.b, op: p.op, ans: p.ans, skill: p.skill });
     if (pstate.misses.length > MISS_CAP) pstate.misses = pstate.misses.slice(-MISS_CAP);
     zone.className = "flash-bad";
-    $("problemEl").textContent = `${p.a} ${p.op} ${p.b} = ${p.ans}`;
+    $("problemEl").textContent = problemText(lang, p) + (p.skill === "invest" ? ` → ${p.ans}` : ` = ${p.ans}`);
     const tip = $("tipEl");
     tip.textContent = "💡 " + tipText(lang, tipFor(p));
     tip.className = "tip show";
@@ -477,7 +479,7 @@ function endDrill() {
     mc.style.display = "block";
     d.misses.slice(0, 8).forEach((m) => {
       const row = document.createElement("div");
-      row.innerHTML = `<span>${m.a} ${m.op} ${m.b}</span><span><span class="wrong">${Number.isNaN(m.given) ? "–" : m.given}</span><span class="right">${m.ans}</span></span>`;
+      row.innerHTML = `<span>${escapeHtml(problemText(lang, m))}</span><span><span class="wrong">${Number.isNaN(m.given) ? "–" : m.given}</span><span class="right">${m.ans}</span></span>`;
       ml.appendChild(row);
     });
   } else mc.style.display = "none";

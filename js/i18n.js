@@ -35,7 +35,7 @@ export const T = {
     navProgress: "Utveckling",
     navProfile: "Profil",
     hello: "Hej",
-    skills: { add: "Addition", sub: "Subtraktion", mul: "Multiplikation", div: "Division", mix: "Blandat" },
+    skills: { add: "Addition", sub: "Subtraktion", mul: "Multiplikation", div: "Division", invest: "Investering", mix: "Blandat" },
     lvl: "Nivå",
     tables: "tabeller",
     noSessions: "Inga pass ännu — kör ett första!",
@@ -56,7 +56,27 @@ export const T = {
     importOk: "Profil importerad!",
     importErr: "Kunde inte läsa filen — är det en Huvudräkning-export?",
     importReplace: "Profilen finns redan på den här enheten. Ersätta den och dess historik?",
+    probs: {
+      invPercentOf: (p) => `${p.a} % av ${p.b}?`,
+      invChangeUp: (p) => `Från ${p.a} till ${p.b} — uppgång i %?`,
+      invChangeDown: (p) => `Från ${p.a} till ${p.b} — nedgång i %?`,
+      invRule72Years: (p) => `${p.b} % avkastning per år — hur många år till dubbling?`,
+      invRule72Rate: (p) => `Pengarna dubblas på ${p.b} år — avkastning i % per år?`,
+      invYield: (p) => `Utdelning ${p.a} kr, kurs ${p.b} kr — direktavkastning i %?`,
+      invPE: (p) => `Kurs ${p.a} kr, vinst ${p.b} kr/aktie — P/E?`,
+      invCompound: (p) => `${p.a} kr växer ${p.b} % per år i 2 år — slutvärde?`,
+      invBreakEven: (p) => `Aktien faller ${p.a} % — hur många % upp till break even?`,
+    },
     tips: {
+      invPercentOf: (p) => `Gå via 10 %: 10 % av ${p.base} är ${p.tenth}. Bygg ${p.p} % därifrån → ${p.ans}.`,
+      invChangeUp: (p) => `Förändringen är ${p.diff}. Hur stor del är ${p.diff} av ${p.from}? → ${p.ans} %.`,
+      invChangeDown: (p) => `Förändringen är ${p.diff}. Hur stor del är ${p.diff} av ${p.from}? → ${p.ans} %.`,
+      invRule72Years: (p) => `72-regeln: 72 ÷ ${p.rate} = ${p.ans} år till dubbling.`,
+      invRule72Rate: (p) => `72-regeln: 72 ÷ ${p.years} = ${p.ans} % per år.`,
+      invYield: (p) => `1 % av kursen ${p.price} är ${p.onePct}. ${p.div} ÷ ${p.onePct} = ${p.ans} %.`,
+      invPE: (p) => `Tänk baklänges: ${p.eps} × ? = ${p.price}. Svar: ${p.ans}.`,
+      invCompound: (p) => `Ett år i taget: ${p.base} → +${p.r} % = ${p.mid} → +${p.r} % = ${p.ans}. Ränta på ränta!`,
+      invBreakEven: (p) => `Ner ${p.d} % lämnar ${p.left} av 100. Uppgången räknas på ${p.left} → ${p.ans} % upp.`,
       addLeftRight: (p) => `Räkna vänster till höger: ${p.big}+${p.small} → ${p.big}+${p.tens}=${p.mid}, sedan +${p.rest} = ${p.ans}.`,
       addMakeTen: (p) => `Fyll upp till tio: ${p.big}+${p.small} → ${p.big}+${p.toTen}=${p.mid}, sedan +${p.rest} = ${p.ans}.`,
       addTens: (p) => `Räkna tior: ${p.big}+${p.small} är ${p.tCount} tior uppåt → ${p.ans}.`,
@@ -109,7 +129,7 @@ export const T = {
     navProgress: "Progress",
     navProfile: "Profile",
     hello: "Hi",
-    skills: { add: "Addition", sub: "Subtraction", mul: "Multiplication", div: "Division", mix: "Mixed" },
+    skills: { add: "Addition", sub: "Subtraction", mul: "Multiplication", div: "Division", invest: "Investing", mix: "Mixed" },
     lvl: "Level",
     tables: "tables",
     noSessions: "No sessions yet — do your first!",
@@ -130,7 +150,27 @@ export const T = {
     importOk: "Profile imported!",
     importErr: "Couldn't read the file — is it a Huvudräkning export?",
     importReplace: "This profile already exists on this device. Replace it and its history?",
+    probs: {
+      invPercentOf: (p) => `${p.a}% of ${p.b}?`,
+      invChangeUp: (p) => `From ${p.a} to ${p.b} — gain in %?`,
+      invChangeDown: (p) => `From ${p.a} to ${p.b} — drop in %?`,
+      invRule72Years: (p) => `${p.b}% return per year — years to double?`,
+      invRule72Rate: (p) => `Money doubles in ${p.b} years — return in % per year?`,
+      invYield: (p) => `Dividend ${p.a} kr, price ${p.b} kr — yield in %?`,
+      invPE: (p) => `Price ${p.a} kr, earnings ${p.b} kr/share — P/E?`,
+      invCompound: (p) => `${p.a} kr grows ${p.b}% per year for 2 years — end value?`,
+      invBreakEven: (p) => `Stock falls ${p.a}% — how many % up to break even?`,
+    },
     tips: {
+      invPercentOf: (p) => `Go via 10%: 10% of ${p.base} is ${p.tenth}. Build ${p.p}% from there → ${p.ans}.`,
+      invChangeUp: (p) => `The change is ${p.diff}. What share is ${p.diff} of ${p.from}? → ${p.ans}%.`,
+      invChangeDown: (p) => `The change is ${p.diff}. What share is ${p.diff} of ${p.from}? → ${p.ans}%.`,
+      invRule72Years: (p) => `Rule of 72: 72 ÷ ${p.rate} = ${p.ans} years to double.`,
+      invRule72Rate: (p) => `Rule of 72: 72 ÷ ${p.years} = ${p.ans}% per year.`,
+      invYield: (p) => `1% of the price ${p.price} is ${p.onePct}. ${p.div} ÷ ${p.onePct} = ${p.ans}%.`,
+      invPE: (p) => `Think backwards: ${p.eps} × ? = ${p.price}. Answer: ${p.ans}.`,
+      invCompound: (p) => `One year at a time: ${p.base} → +${p.r}% = ${p.mid} → +${p.r}% = ${p.ans}. Compounding!`,
+      invBreakEven: (p) => `Down ${p.d}% leaves ${p.left} of 100. The climb is measured on ${p.left} → ${p.ans}% up.`,
       addLeftRight: (p) => `Left to right: ${p.big}+${p.small} → ${p.big}+${p.tens}=${p.mid}, then +${p.rest} = ${p.ans}.`,
       addMakeTen: (p) => `Make a ten: ${p.big}+${p.small} → ${p.big}+${p.toTen}=${p.mid}, then +${p.rest} = ${p.ans}.`,
       addTens: (p) => `Count tens: ${p.big}+${p.small} is ${p.tCount} tens up → ${p.ans}.`,
@@ -156,4 +196,11 @@ export const T = {
 export function tipText(lang, tip) {
   const f = T[lang].tips[tip.kind];
   return f ? f(tip) : "";
+}
+
+/** Render a problem as display text: worded template for investor problems,
+    plain "a op b" for arithmetic. */
+export function problemText(lang, p) {
+  const f = T[lang].probs[p.op];
+  return f ? f(p) : `${p.a} ${p.op} ${p.b}`;
 }

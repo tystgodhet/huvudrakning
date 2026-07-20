@@ -23,5 +23,5 @@ export function nextLevel(level, attempted, correct) {
 
 /** True when adaptive levelling applies to a session of this skill. */
 export function isAdaptiveSkill(skill) {
-  return skill === "add" || skill === "sub";
+  return skill === "add" || skill === "sub" || skill === "invest";
 }

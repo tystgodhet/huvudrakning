@@ -14,10 +14,87 @@ export function randInt(rng, lo, hi) {
   return lo + Math.floor(rng() * (hi - lo + 1));
 }
 
+function pick(rng, arr) {
+  return arr[randInt(rng, 0, arr.length - 1)];
+}
+
+/* ---- investor mode ----
+   Problems that build the mental math investors actually use. Each problem
+   is fully described by (op, a, b): op names the kind, a/b are the two
+   salient numbers, so misses round-trip through storage unchanged. All
+   parameters are constrained so answers are positive integers (the keypad
+   has no minus sign or decimal point). */
+
+export const INVEST_LEVEL_KINDS = [
+  ["invPercentOf", "invRule72Years"],
+  ["invPercentOf", "invChange", "invRule72Rate"],
+  ["invYield", "invPE", "invChange", "invRule72Years"],
+  ["invCompound", "invBreakEven", "invPercentOf", "invYield"],
+  ["invCompound", "invBreakEven", "invPercentOf", "invPE", "invChange"],
+];
+
+const INVEST_GEN = {
+  // p % of base. Bases are multiples of 20 (early) or 100 (late) so every
+  // listed percentage yields an integer.
+  invPercentOf(rng, level) {
+    const pcts =
+      level <= 1 ? [10, 20, 25, 50] : level <= 2 ? [5, 15, 30, 75] : level <= 4 ? [4, 6, 8, 12, 15] : [3, 7, 9, 11, 15];
+    const p = pick(rng, pcts);
+    const base = level <= 2 ? 20 * randInt(rng, 2, 15) : 100 * randInt(rng, 2, level >= 5 ? 20 : 9);
+    return { op: "invPercentOf", a: p, b: base, ans: (p * base) / 100 };
+  },
+  // From a to b — change in %. a is a multiple of 20 and pct a multiple of 5,
+  // so the price difference is always an integer.
+  invChange(rng, level) {
+    const from = 20 * pick(rng, [1, 2, 4, 5, 10, 15, 25]);
+    const down = level >= 3 && rng() < 0.5;
+    const pct = pick(rng, down ? [10, 25, 50, 75] : [10, 25, 50, 100]);
+    const diff = (from * pct) / 100;
+    return down
+      ? { op: "invChangeDown", a: from, b: from - diff, ans: pct }
+      : { op: "invChangeUp", a: from, b: from + diff, ans: pct };
+  },
+  // Rule of 72: years to double at b % — rates are divisors of 72.
+  invRule72Years(rng) {
+    const rate = pick(rng, [2, 3, 4, 6, 8, 9, 12]);
+    return { op: "invRule72Years", a: 72, b: rate, ans: 72 / rate };
+  },
+  // Rule of 72 backwards: required return to double in b years.
+  invRule72Rate(rng) {
+    const years = pick(rng, [3, 4, 6, 8, 9, 12]);
+    return { op: "invRule72Rate", a: 72, b: years, ans: 72 / years };
+  },
+  // Dividend a on price b → yield %. Prices are multiples of 100.
+  invYield(rng) {
+    const price = 100 * randInt(rng, 1, 5);
+    const y = randInt(rng, 2, 8);
+    return { op: "invYield", a: (price * y) / 100, b: price, ans: y };
+  },
+  // Price a, earnings per share b → P/E.
+  invPE(rng) {
+    const eps = randInt(rng, 2, 12);
+    const pe = randInt(rng, 8, 25);
+    return { op: "invPE", a: eps * pe, b: eps, ans: pe };
+  },
+  // a kr compounding at b % for 2 years. Bases are multiples of 100 and
+  // rates in {10,20,50}, so both intermediate and final values are integers.
+  invCompound(rng) {
+    const r = pick(rng, [10, 20, 50]);
+    const base = 100 * randInt(rng, 1, 5);
+    return { op: "invCompound", a: base, b: r, ans: (base * (100 + r) * (100 + r)) / 10000 };
+  },
+  // Down a % — how many % up to get back to even? Drops chosen so
+  // 100·a/(100−a) is an integer.
+  invBreakEven(rng, level) {
+    const d = pick(rng, level >= 5 ? [20, 50, 60, 75, 80, 90] : [20, 50, 60, 75, 80]);
+    return { op: "invBreakEven", a: d, b: 100 - d, ans: (100 * d) / (100 - d) };
+  },
+};
+
 /**
  * Generate one problem.
  * @param {object} opts
- * @param {"add"|"sub"|"mul"|"div"|"mix"} opts.skill
+ * @param {"add"|"sub"|"mul"|"div"|"mix"|"invest"} opts.skill
  * @param {object} opts.levels    per-skill levels 1–5 (used for add/sub)
  * @param {number[]} opts.tables  selected tables 1–12 (used for mul/div)
  * @param {object[]} opts.misses  outstanding misses [{skill,a,b,op,ans}]
@@ -35,6 +112,12 @@ export function generateProblem({ skill, levels = {}, tables = [], misses = [], 
   if (skillMisses.length && rng() < MISS_RESAMPLE_RATE) {
     const m = skillMisses[randInt(rng, 0, skillMisses.length - 1)];
     return { skill: s, a: m.a, b: m.b, op: m.op, ans: m.ans, fromMiss: true };
+  }
+
+  if (s === "invest") {
+    const lvl = Math.min(Math.max(levels.invest || 1, 1), INVEST_LEVEL_KINDS.length);
+    const kind = pick(rng, INVEST_LEVEL_KINDS[lvl - 1]);
+    return { skill: "invest", ...INVEST_GEN[kind](rng, lvl), fromMiss: false };
   }
 
   const level = Math.min(Math.max(levels[s] || 1, 1), LEVEL_RANGES.length);
@@ -70,6 +153,18 @@ export function generateProblem({ skill, levels = {}, tables = [], misses = [], 
  */
 export function tipFor(p) {
   const { a, b, op, ans } = p;
+
+  if (typeof op === "string" && op.startsWith("inv")) {
+    if (op === "invPercentOf") return { kind: op, p: a, base: b, tenth: b / 10, ans };
+    if (op === "invChangeUp") return { kind: op, from: a, diff: b - a, ans };
+    if (op === "invChangeDown") return { kind: op, from: a, diff: a - b, ans };
+    if (op === "invRule72Years") return { kind: op, rate: b, ans };
+    if (op === "invRule72Rate") return { kind: op, years: b, ans };
+    if (op === "invYield") return { kind: op, div: a, price: b, onePct: b / 100, ans };
+    if (op === "invPE") return { kind: op, price: a, eps: b, ans };
+    if (op === "invCompound") return { kind: op, base: a, r: b, mid: (a * (100 + b)) / 100, ans };
+    return { kind: "invBreakEven", d: a, left: 100 - a, ans };
+  }
 
   if (op === "+") {
     const big = Math.max(a, b);
