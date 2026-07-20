@@ -3,8 +3,8 @@
 export const MIN_LEVEL = 1;
 export const MAX_LEVEL = 5;
 export const MIN_ATTEMPTS = 5;
-export const LEVEL_UP_ACC = 90; // ≥90 % → level up
-export const LEVEL_DOWN_ACC = 70; // <70 % → level down (target band ~80–85 %)
+export const LEVEL_UP_ACC = 85; // >85 % → level up
+export const LEVEL_DOWN_ACC = 70; // <70 % → level down (target band ~75–85 %)
 
 /**
  * Level after a finished session.
@@ -16,7 +16,7 @@ export const LEVEL_DOWN_ACC = 70; // <70 % → level down (target band ~80–85 
 export function nextLevel(level, attempted, correct) {
   if (attempted < MIN_ATTEMPTS) return level;
   const acc = (correct / attempted) * 100;
-  if (acc >= LEVEL_UP_ACC) return Math.min(MAX_LEVEL, level + 1);
+  if (acc > LEVEL_UP_ACC) return Math.min(MAX_LEVEL, level + 1);
   if (acc < LEVEL_DOWN_ACC) return Math.max(MIN_LEVEL, level - 1);
   return level;
 }

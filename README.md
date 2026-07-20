@@ -21,8 +21,9 @@ served as static files. UI is Swedish by default with an English toggle.
   shortcuts) for ×/÷; difficulty levels 1–5 for +/− controlling number ranges
 - **Timed drills**: 60/90/120 s (default 90), on-screen keypad, hardware
   keyboard also works
-- **Adaptive levels** for +/−: after a session with ≥5 attempts, ≥90 %
-  accuracy levels up, <70 % levels down (targets an ~80–85 % success band)
+- **Adaptive levels** for +/−/investing: after a session with ≥5 attempts,
+  >85 % accuracy levels up, <70 % levels down (targets an ~75–85 % success
+  band)
 - **Technique tips on misses**, computed from the actual numbers:
   left-to-right addition, make-a-ten, subtract-by-rounding, the 9s and 5s
   tricks, distributive splits, think-backwards division
