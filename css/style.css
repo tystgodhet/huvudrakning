@@ -60,6 +60,8 @@ h2{font-size:22px; margin:14px 0 10px; letter-spacing:-0.02em;}
 .fuse.low{background:var(--red);}
 .drill-meta{display:flex; justify-content:space-between; font-size:13px; color:var(--muted); font-weight:500;}
 .problem{font-size:min(17vw, 72px); font-weight:700; text-align:center; margin:26px 0 6px; letter-spacing:-0.02em; font-variant-numeric:tabular-nums;}
+/* worded problems (investor mode) need sentence sizing, not digit sizing */
+.problem.long{font-size:clamp(19px, 5.6vw, 26px); line-height:1.35; letter-spacing:0; margin:22px 0 6px; min-height:2.7em; display:flex; align-items:center; justify-content:center;}
 .answer-line{text-align:center; font-size:min(12vw, 46px); font-weight:700; min-height:1.3em;
   color:var(--blue-dark); font-variant-numeric:tabular-nums;}
 .answer-line .caret{display:inline-block; width:3px; height:.9em; background:var(--blue); vertical-align:-0.08em; animation:blink 1s steps(1) infinite;}

@@ -11,7 +11,12 @@ served as static files. UI is Swedish by default with an English toggle.
 ## Features
 
 - **Local profiles** (name + avatar emoji), multiple kids on one device
-- **Skills**: addition, subtraction, multiplication, division, mixed
+- **Skills**: addition, subtraction, multiplication, division, mixed, and an
+  **investor mode** — the mental math investors actually use: percentages of
+  amounts, percent up/down moves, the rule of 72, dividend yield, P/E ratios,
+  two-year compounding, and break-even after a drawdown, with adaptive
+  levels 1–5 and technique tips (e.g. "the climb back is measured on what's
+  left")
 - **Scope per session**: individual tables 1–12 (or "upp till 10:an"-style
   shortcuts) for ×/÷; difficulty levels 1–5 for +/− controlling number ranges
 - **Timed drills**: 60/90/120 s (default 90), on-screen keypad, hardware
