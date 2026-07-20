@@ -1,5 +1,7 @@
 /* Pure problem generation + technique-tip selection. No DOM, no storage. */
 
+import { factKey, SLUMP_SHARE, LADDER_LEVELS } from "./ladder.js";
+
 export const LEVEL_RANGES = [
   [1, 10],
   [5, 30],
@@ -16,6 +18,54 @@ export function randInt(rng, lo, hi) {
 
 function pick(rng, arr) {
   return arr[randInt(rng, 0, arr.length - 1)];
+}
+
+/* ---- multiplication mastery ladder ---- */
+
+/** All facts belonging to a ladder level, as [a, b] pairs. */
+export function ladderPool(level) {
+  const pairs = [];
+  if (level <= 3) {
+    const top = level === 1 ? 5 : level === 2 ? 10 : 12;
+    for (let t = 1; t <= top; t++) for (let f = 1; f <= 10; f++) pairs.push([t, f]);
+  } else if (level === 4) {
+    for (let a = 12; a <= 29; a++) for (let b = 3; b <= 9; b++) pairs.push([a, b]);
+  } else if (level === 5) {
+    for (let n = 11; n <= 25; n++) pairs.push([n, n]);
+  } else {
+    for (let a = 11; a <= 25; a++) for (let b = a; b <= 25; b++) pairs.push([a, b]);
+  }
+  return pairs;
+}
+
+/**
+ * Generate one ladder problem, sampled by per-fact practice weight
+ * (default 1). With slump=true, ~SLUMP_SHARE of problems come from the
+ * level below — the visible level never moves down.
+ * @param {object} opts
+ * @param {number} opts.level  ladder level 1–6
+ * @param {object} opts.facts  { "3x7": {w, ok, t}, ... }
+ * @param {boolean} [opts.slump]
+ * @param {function} [opts.rng]
+ */
+export function generateLadderProblem({ level, facts = {}, slump = false, rng = Math.random }) {
+  let lvl = Math.min(Math.max(level, 1), LADDER_LEVELS);
+  const fromBelow = slump && lvl > 1 && rng() < SLUMP_SHARE;
+  if (fromBelow) lvl -= 1;
+  const pool = ladderPool(lvl);
+  const ws = pool.map(([a, b]) => {
+    const f = facts[factKey(a, b)];
+    return f && f.w ? f.w : 1;
+  });
+  let r = rng() * ws.reduce((s, w) => s + w, 0);
+  let i = 0;
+  for (; i < pool.length - 1; i++) {
+    r -= ws[i];
+    if (r < 0) break;
+  }
+  let [a, b] = pool[i];
+  if (rng() < 0.5) [a, b] = [b, a];
+  return { skill: "mul", a, b, op: "×", ans: a * b, ladder: lvl, fromBelow, fromMiss: false };
 }
 
 /* ---- investor mode ----
@@ -197,6 +247,18 @@ export function tipFor(p) {
   if (op === "×") {
     if (a === 1 || b === 1) return { kind: "mul1", ans };
     if (a === 10 || b === 10) return { kind: "mul10", other: a === 10 ? b : a, ans };
+    if (a === b && a >= 11 && a % 10 !== 0) {
+      // squares: (n−d)(n+d) + d², rounding to the nearest ten
+      const d = Math.min(a % 10, 10 - (a % 10));
+      return { kind: "mulSquare", n: a, d, low: a - d, high: a + d, prod: (a - d) * (a + d), dsq: d * d, ans };
+    }
+    if (Math.min(a, b) >= 11 && Math.max(a, b) % 10 !== 0) {
+      // two-digit × two-digit: split the larger factor into tens + ones
+      const lo = Math.min(a, b);
+      const hi = Math.max(a, b);
+      const tens = Math.floor(hi / 10) * 10;
+      return { kind: "mulSplit2", a: lo, b: hi, tens, ones: hi % 10, p1: lo * tens, p2: lo * (hi % 10), ans };
+    }
     if (a === 9 || b === 9) return { kind: "mul9", other: a === 9 ? b : a, ans };
     if (a === 5 || b === 5) {
       const other = a === 5 ? b : a;

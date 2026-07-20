@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateProblem, tipFor, LEVEL_RANGES, INVEST_LEVEL_KINDS } from "../js/problems.js";
+import { generateProblem, generateLadderProblem, ladderPool, tipFor, LEVEL_RANGES, INVEST_LEVEL_KINDS } from "../js/problems.js";
 
 // deterministic rng (mulberry32)
 function seeded(seed) {
@@ -96,6 +96,80 @@ test("misses from another skill are not resampled", () => {
   const rng = () => 0.0; // would always resample if eligible
   const p = generateProblem({ skill: "mul", tables: [2], misses, rng });
   assert.equal(p.fromMiss, false);
+});
+
+test("ladder problems stay within each level's fact pool and are correct", () => {
+  const inPool = (level, a, b) => {
+    const lo = Math.min(a, b);
+    const hi = Math.max(a, b);
+    if (level <= 3) {
+      const top = level === 1 ? 5 : level === 2 ? 10 : 12;
+      return (lo <= top && hi <= 10) || (hi <= top && lo <= 10);
+    }
+    if (level === 4) return lo >= 3 && lo <= 9 && hi >= 12 && hi <= 29;
+    if (level === 5) return a === b && a >= 11 && a <= 25;
+    return lo >= 11 && hi <= 25;
+  };
+  for (let level = 1; level <= 6; level++) {
+    const rng = seeded(level * 31);
+    for (let i = 0; i < 300; i++) {
+      const p = generateLadderProblem({ level, rng });
+      assert.equal(p.skill, "mul");
+      assert.equal(p.ans, p.a * p.b);
+      assert.equal(p.ladder, level);
+      assert.equal(p.fromBelow, false);
+      assert.ok(inPool(level, p.a, p.b), `${p.a}×${p.b} outside level ${level}`);
+    }
+  }
+});
+
+test("high-weight facts are sampled far more often", () => {
+  const facts = { "7x8": { w: 27, ok: false, t: 8 } };
+  const rng = seeded(3);
+  let hits = 0;
+  const N = 1000;
+  for (let i = 0; i < N; i++) {
+    const p = generateLadderProblem({ level: 2, facts, rng });
+    if (Math.min(p.a, p.b) === 7 && Math.max(p.a, p.b) === 8) hits++;
+  }
+  // uniform would be ~2 %, weighted expectation is ~26 %
+  assert.ok(hits / N > 0.12, `weighted fact hit rate ${hits / N} too low`);
+});
+
+test("slump mixes in ~30% problems from the level below, never above", () => {
+  const rng = seeded(17);
+  let below = 0;
+  const N = 1000;
+  for (let i = 0; i < N; i++) {
+    const p = generateLadderProblem({ level: 3, slump: true, rng });
+    if (p.fromBelow) {
+      below++;
+      assert.equal(p.ladder, 2);
+    } else assert.equal(p.ladder, 3);
+  }
+  const rate = below / N;
+  assert.ok(rate > 0.2 && rate < 0.4, `fromBelow rate ${rate} not ≈0.3`);
+  // no slump on level 1 even when flagged
+  const p1 = generateLadderProblem({ level: 1, slump: true, rng });
+  assert.equal(p1.fromBelow, false);
+});
+
+test("ladder pools have the expected sizes", () => {
+  assert.equal(ladderPool(1).length, 50);
+  assert.equal(ladderPool(2).length, 100);
+  assert.equal(ladderPool(3).length, 120);
+  assert.equal(ladderPool(5).length, 15);
+});
+
+test("square and two-digit tips are numerically consistent", () => {
+  const sq = tipFor({ a: 23, b: 23, op: "×", ans: 529 });
+  assert.equal(sq.kind, "mulSquare");
+  assert.equal(sq.prod + sq.dsq, 529);
+  const two = tipFor({ a: 17, b: 23, op: "×", ans: 391 });
+  assert.equal(two.kind, "mulSplit2");
+  assert.equal(two.p1 + two.p2, 391);
+  // round factors fall back to the tens split
+  assert.equal(tipFor({ a: 20, b: 20, op: "×", ans: 400 }).kind, "mulSplit10");
 });
 
 test("invest problems draw from the level's kinds and have positive integer answers", () => {

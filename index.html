@@ -55,6 +55,11 @@
     <p class="sub" data-i="pickSkill">Välj vad du vill träna på idag.</p>
     <div class="skill-grid" id="skillGrid"></div>
 
+    <div class="card" id="ladderCard" style="display:none; margin-top:12px;">
+      <b data-i="ladderTitle">Nivåstege</b>
+      <div id="ladderList"></div>
+    </div>
+
     <div class="card" id="tablesCard" style="display:none; margin-top:12px;">
       <b data-i="whichTables">Vilka tabeller?</b>
       <div class="tables-wrap" id="tablesWrap"></div>
@@ -75,7 +80,7 @@
 
   <!-- DRILL -->
   <section class="screen" id="scr-drill">
-    <div class="drill-meta"><span id="drillSkillLbl"></span><span id="drillCount">0 ✓</span></div>
+    <div class="drill-meta"><span id="drillSkillLbl"></span><span class="fb-chip" id="fbChip"></span><span id="drillCount">0 ✓</span></div>
     <div class="fuse-track"><div class="fuse" id="fuse"></div></div>
     <div id="drillZone">
       <div class="problem" id="problemEl">7 × 8</div>
@@ -97,7 +102,9 @@
       <div class="stat"><b id="resAvg">–</b><span data-i="avgTime">snitt/tal</span></div>
       <div class="stat"><b id="resLvl">–</b><span data-i="level">nivå</span></div>
     </div>
+    <div class="pb-banner" id="promoBanner" style="display:none;">🔓</div>
     <div class="pb-banner" id="pbBanner">🏅</div>
+    <p class="sub" id="vsAvg" style="display:none; text-align:center; margin:10px 0 0;"></p>
     <div class="card" id="missCard" style="margin-top:12px; display:none;">
       <b data-i="toReview">Att träna extra på</b>
       <div class="miss-list" id="missList"></div>
@@ -126,7 +133,7 @@
     </div>
     <div class="card" id="masteryCard" style="display:none;">
       <b data-i="tableMastery">Tabellkoll</b>
-      <div class="mastery" id="masteryGrid"></div>
+      <div id="masteryHost"></div>
     </div>
     <div class="card">
       <b data-i="lastSessions">Senaste passen</b>

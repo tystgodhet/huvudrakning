@@ -1,5 +1,5 @@
 /* Cache-first service worker. Bump VERSION on every deploy to refresh clients. */
-const VERSION = "huvudrakning-v3";
+const VERSION = "huvudrakning-v4";
 const RUNTIME = VERSION + ":runtime";
 
 const PRECACHE = [
@@ -12,6 +12,7 @@ const PRECACHE = [
   "./js/storage.js",
   "./js/problems.js",
   "./js/adaptive.js",
+  "./js/ladder.js",
   "./js/stats.js",
   "./js/charts.js",
   "./icons/icon-192.png",
