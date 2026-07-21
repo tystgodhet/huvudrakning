@@ -75,6 +75,11 @@ export const T = {
     hmWrong: "Fel senast",
     hmNew: "Ej tränad",
     squaresLbl: "Kvadrater",
+    showAll: "Visa alla",
+    onlyFocus: "Bara fel & långsamma",
+    noDetails: "Det här passet saknar detaljdata (spelat före uppdateringen).",
+    allClean: "Inga fel eller långsamma svar — snyggt!",
+    youAnswered: "du svarade",
     probs: {
       invPercentOf: (p) => `${p.a} % av ${p.b}?`,
       invChangeUp: (p) => `Från ${p.a} till ${p.b} — uppgång i %?`,
@@ -190,6 +195,11 @@ export const T = {
     hmWrong: "Missed last time",
     hmNew: "Not practiced",
     squaresLbl: "Squares",
+    showAll: "Show all",
+    onlyFocus: "Only misses & slow",
+    noDetails: "This session has no per-problem details (played before this update).",
+    allClean: "No misses or slow answers — nice!",
+    youAnswered: "you answered",
     probs: {
       invPercentOf: (p) => `${p.a}% of ${p.b}?`,
       invChangeUp: (p) => `From ${p.a} to ${p.b} — gain in %?`,
