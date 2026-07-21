@@ -40,6 +40,8 @@ let sessions = []; // current profile's history, append-only
 let drill = null;
 let progSkill = "mul";
 let npEmoji = EMOJIS[0];
+let sdSession = null; // session record shown in the detail view
+let sdFilter = "all"; // "all" | "focus"
 
 function t(key) {
   return T[lang][key];
@@ -97,13 +99,14 @@ function applyLang() {
   renderHome();
   renderHello();
   renderProfiles();
+  if (sdSession && $("scr-sessdetail").classList.contains("visible")) renderSessDetail();
 }
 
 /* ============ navigation ============ */
-const SCREENS = ["profiles", "home", "drill", "result", "progress"];
+const SCREENS = ["profiles", "home", "drill", "result", "progress", "sessdetail"];
 function show(name) {
   SCREENS.forEach((s) => $("scr-" + s).classList.toggle("visible", s === name));
-  const navMap = { home: "nav-home", progress: "nav-progress", profiles: "nav-profiles" };
+  const navMap = { home: "nav-home", progress: "nav-progress", sessdetail: "nav-progress", profiles: "nav-profiles" };
   document.querySelectorAll("nav button").forEach((b) => b.classList.remove("active"));
   if (navMap[name]) $(navMap[name]).classList.add("active");
   if (name === "progress") renderProgress();
@@ -373,6 +376,7 @@ function startDrill() {
     correct: 0,
     times: [],
     misses: [],
+    items: [],
     current: null,
     input: "",
     locked: false,
@@ -481,6 +485,8 @@ function submit() {
   drill.attempted++;
   drill.locked = true;
   const ok = val === p.ans;
+  // full per-problem log so a session can be replayed in the detail view
+  drill.items.push({ skill: p.skill, a: p.a, b: p.b, op: p.op, ans: p.ans, given: val, ms: Math.round(dt * 1000), at: Date.now() });
   // instant feedback: right/wrong + time, always against the clock, never a sound
   const fb = $("fbChip");
   fb.textContent = (ok ? "✓ " : "✗ ") + fmtSec(dt);
@@ -546,6 +552,7 @@ function endDrill() {
     avg: Math.round(avg * 10) / 10,
     med: d.times.length ? Math.round(median(d.times) * 10) / 10 : null,
     misses: d.misses,
+    items: d.items,
   };
   sessions.push(rec); // append-only, never overwrite
 
@@ -789,28 +796,99 @@ function renderSessList() {
     host.innerHTML = `<p class="sub" style="margin:6px 0;">${t("noSessions")}</p>`;
     return;
   }
-  const locale = lang === "sv" ? "sv-SE" : "en-GB";
   data.forEach((s) => {
-    const d = new Date(s.at);
-    const when =
-      d.toLocaleDateString(locale, { day: "numeric", month: "short" }) +
-      " " +
-      d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
-    const scope =
-      s.tables && s.tables.length
-        ? ` · ≤${Math.max(...s.tables)}`
-        : s.ladder
-          ? ` · ${t("lvl")} ${s.ladder}`
-          : s.level
-            ? ` · ${t("lvl")} ${s.level}`
-            : "";
-    const row = document.createElement("div");
+    const when = fmtWhen(s.at);
+    const scope = sessScope(s);
+    const row = document.createElement("button");
     row.className = "sess-item";
     row.innerHTML = `<span>${T[lang].skills[s.skill]}${scope}<br><span class="when">${when}</span></span>
       <span style="text-align:right; font-variant-numeric:tabular-nums;"><b>${s.correct}</b> ${t("correctOf")} ${s.attempted}<br><span class="when">${s.acc}% · ${s.avg}s</span></span>`;
+    row.onclick = () => {
+      sdSession = s;
+      sdFilter = "all";
+      renderSessDetail();
+      show("sessdetail");
+    };
     host.appendChild(row);
   });
 }
+
+function fmtWhen(at) {
+  const locale = lang === "sv" ? "sv-SE" : "en-GB";
+  const d = new Date(at);
+  return (
+    d.toLocaleDateString(locale, { day: "numeric", month: "short" }) +
+    " " +
+    d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
+  );
+}
+
+function sessScope(s) {
+  return s.tables && s.tables.length
+    ? ` · ≤${Math.max(...s.tables)}`
+    : s.ladder
+      ? ` · ${t("lvl")} ${s.ladder}`
+      : s.level
+        ? ` · ${t("lvl")} ${s.level}`
+        : "";
+}
+
+/* ============ session detail ============ */
+const SLOW_MS = 5000; // correct answers slower than this get a ⚠️
+
+function renderSessDetail() {
+  const s = sdSession;
+  if (!s) return;
+  $("sdTitle").textContent = `${T[lang].skills[s.skill]}${sessScope(s)}`;
+  $("sdMeta").textContent =
+    `${fmtWhen(s.at)} · ${s.correct} ${t("correctOf")} ${s.attempted} · ${s.acc} % · ${fmtSec(s.avg)}/${lang === "sv" ? "tal" : "problem"}`;
+  $("sdAll").classList.toggle("active", sdFilter === "all");
+  $("sdFocus").classList.toggle("active", sdFilter === "focus");
+
+  const host = $("sdList");
+  host.innerHTML = "";
+  const items = Array.isArray(s.items) ? s.items : [];
+  if (!items.length) {
+    host.innerHTML = `<p class="sub" style="margin:6px 0;">${t("noDetails")}</p>`;
+    return;
+  }
+  const shown = items.filter((it) => {
+    if (sdFilter === "all") return true;
+    const ok = it.given === it.ans;
+    return !ok || it.ms > SLOW_MS;
+  });
+  if (!shown.length) {
+    host.innerHTML = `<p class="sub" style="margin:6px 0;">🎉 ${t("allClean")}</p>`;
+    return;
+  }
+  shown.forEach((it) => {
+    const ok = it.given === it.ans;
+    const slow = ok && it.ms > SLOW_MS;
+    const left =
+      it.skill === "invest"
+        ? `${problemText(lang, it)} <b>${it.ans}</b>`
+        : `${it.a} ${it.op} ${it.b} = <b>${it.ans}</b>`;
+    const res = !ok
+      ? `<span class="sd-res bad">✗ ${Number.isNaN(it.given) ? "–" : it.given} · ${fmtSec(it.ms / 1000)}</span>`
+      : slow
+        ? `<span class="sd-res warn">⚠️ ✓ ${fmtSec(it.ms / 1000)}</span>`
+        : `<span class="sd-res ok">✓ ${fmtSec(it.ms / 1000)}</span>`;
+    const row = document.createElement("div");
+    row.className = "sd-row";
+    row.innerHTML = `<span class="sd-q">${left}</span>${res}`;
+    host.appendChild(row);
+  });
+}
+
+$("sdBack").onclick = () => show("progress");
+$("sdAll").onclick = () => {
+  sdFilter = "all";
+  renderSessDetail();
+};
+$("sdFocus").onclick = () => {
+  sdFilter = "focus";
+  renderSessDetail();
+};
 
 /* ============ wiring ============ */
 $("nav-home").onclick = () => show(currentProfile ? "home" : "profiles");

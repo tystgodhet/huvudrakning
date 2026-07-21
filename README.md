@@ -46,6 +46,11 @@ served as static files. UI is Swedish by default with an English toggle.
 - **Weakness targeting**: every miss is logged per profile; ~30 % of new
   problems resample outstanding misses in the current skill. A miss clears
   once answered correctly.
+- **Clickable session log**: every recent session opens a detail view with
+  the full problem list in order — answer key, ✓/✗, the player's answer on
+  misses, per-problem time, ⚠️ on correct-but-slow (>5 s) — with a
+  "show all / only misses & slow" toggle. Each attempt is stored with
+  problem, answer, given answer, time in ms and timestamp.
 - **Append-only session history** with accuracy + speed charts per skill,
   personal bests, day streak, a per-table mastery grid, and a
   "then vs now" comparison

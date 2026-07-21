@@ -141,6 +141,20 @@ h2{font-size:22px; margin:14px 0 10px; letter-spacing:-0.02em;}
 .sess-item{display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); font-size:14px;}
 .sess-item:last-child{border-bottom:none;}
 .sess-item .when{color:var(--muted); font-size:12px;}
+button.sess-item{width:100%; background:none; border:0; border-bottom:1px solid var(--line); font-family:var(--font);
+  color:inherit; text-align:left; cursor:pointer; align-items:center;}
+button.sess-item:last-child{border-bottom:none;}
+button.sess-item:active{background:#E8EDFC;}
+
+/* session detail */
+.sd-row{display:flex; justify-content:space-between; align-items:baseline; gap:10px; padding:8px 0;
+  border-bottom:1px solid var(--line); font-size:15px; font-variant-numeric:tabular-nums;}
+.sd-row:last-child{border-bottom:none;}
+.sd-row .sd-q{min-width:0;}
+.sd-res{white-space:nowrap; font-weight:700; flex:none;}
+.sd-res.ok{color:var(--green);}
+.sd-res.warn{color:#8A6A12;}
+.sd-res.bad{color:var(--red);}
 
 /* then vs now */
 .tn-row{display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); font-size:14px; font-variant-numeric:tabular-nums;}
