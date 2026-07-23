@@ -1,5 +1,5 @@
 /* Cache-first service worker. Bump VERSION on every deploy to refresh clients. */
-const VERSION = "huvudrakning-v5";
+const VERSION = "huvudrakning-v6";
 const RUNTIME = VERSION + ":runtime";
 
 const PRECACHE = [

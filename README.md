@@ -54,7 +54,11 @@ served as static files. UI is Swedish by default with an English toggle.
 - **Append-only session history** with accuracy + speed charts per skill,
   personal bests, day streak, a per-table mastery grid, and a
   "then vs now" comparison
-- **JSON export/import** to move a profile between devices
+- **JSON export/import** to move a profile between devices, plus two
+  sharing exports: a pseudonymized **analysis file** (full stats and
+  per-problem logs, but no name/avatar — safe to hand a coach or an AI,
+  and deliberately not importable as a profile) and a **CSV** with one
+  row per attempt (semicolon-delimited, opens directly in Excel/Sheets)
 - **Installable PWA** that runs fully offline after the first load
 
 ## Run locally

@@ -50,6 +50,57 @@ export function exportProfile(profile, state, sessions) {
 }
 
 /**
+ * Build a pseudonymized envelope for sharing outside the family (e.g. with
+ * a coach or an AI): full stats and per-problem logs, but no name or
+ * avatar. Deliberately NOT importable as a profile — parseImport rejects
+ * it since the profile carries no name.
+ */
+export function exportAnalysis(profile, state, sessions) {
+  return {
+    app: "huvudrakning",
+    version: 1,
+    kind: "analysis",
+    exportedAt: new Date().toISOString(),
+    profile: { id: profile.id, createdAt: profile.createdAt },
+    state,
+    sessions,
+  };
+}
+
+/**
+ * Per-attempt log as CSV, one row per answered problem. Semicolon
+ * delimiter so Swedish-locale Excel opens it directly; Google Sheets
+ * auto-detects. Sessions recorded before per-problem logging are skipped.
+ */
+export function sessionsToCSV(sessions) {
+  const rows = ["session_at;skill;level;a;op;b;answer;given;correct;ms;at"];
+  for (const s of sessions) {
+    if (!Array.isArray(s.items)) continue;
+    const level = s.ladder ?? s.level ?? "";
+    for (const it of s.items) {
+      const given = typeof it.given === "number" && !Number.isNaN(it.given) ? it.given : "";
+      rows.push(
+        [
+          new Date(s.at).toISOString(),
+          s.skill,
+          level,
+          it.a,
+          it.op,
+          it.b,
+          it.ans,
+          given,
+          given === it.ans ? 1 : 0,
+          it.ms,
+          new Date(it.at).toISOString(),
+        ].join(";")
+      );
+    }
+  }
+  // BOM so Excel detects UTF-8 (the × and ÷ signs)
+  return "\uFEFF" + rows.join("\n") + "\n";
+}
+
+/**
  * Parse + validate an exported envelope.
  * @param {string} json
  * @returns {{profile:object, state:object, sessions:object[]}}
