@@ -1,19 +1,24 @@
-/* Pure mastery-ladder logic for multiplication: named levels, promotion,
-   silent slump support, per-fact practice weights. No DOM, no storage.
+/* Pure mastery logic for multiplication: per-component ("deltal") adaptive
+   levels, active session composition, miss recurrence, practice weights and
+   error classification. No DOM, no storage.
 
-   Design principles: reward mastery (speed + precision), never raw play
-   time. No visible demotion — a slump quietly mixes in easier problems. */
+   Design principles: hold the player in an ~80–85 % accuracy band per
+   component (raise a component's level above 85 %, lower it below 75 %) —
+   there is no single global level. Sessions focus on the two weakest
+   components; misses recur until solved fast twice in a row. */
 
-export const LADDER_LEVELS = 6;
+export const BAND_UP = 85; // component acc above this → level up
+export const BAND_DOWN = 75; // component acc below this → level down
+export const COMP_MAX_LVL = 3;
+export const COMP_WINDOW = 20; // rolling answers kept per component
+export const COMP_MIN = 6; // attempts before the band acts
 
-export const PROMO_ACC = 95; // pooled accuracy over the window, %
-export const PROMO_MEDIAN = 3.0; // median s/problem over the window
-export const PROMO_WINDOW = 3; // sessions at the current level
+export const FOCUS_SHARE = 0.7; // ~70 % of problems from the weakest two
+export const FOCUS_COUNT = 2;
+export const DUE_RATE = 0.25; // recurring-miss injection rate
+export const CLEAR_STREAK = 2; // fast solves in a row to clear a miss
 
-export const SLUMP_ACC = 80; // two sessions in a row below this →
-export const SLUMP_SHARE = 0.3; // ...mix in 30 % from the level below
-
-export const FAST_SEC = 3; // "fast" bar: promotion + heatmap green
+export const FAST_SEC = 3; // "fast" bar: miss clearing + heatmap green
 export const SLOW_SEC = 5; // answers slower than this raise the weight
 
 export const W_WRONG = 3;
@@ -21,6 +26,103 @@ export const W_SLOW = 2;
 export const W_FAST = 0.7;
 export const W_MIN = 0.3;
 export const W_MAX = 27;
+
+/* Components in unlock order: each times table, then two-digit × one-digit,
+   squares, and two-digit × two-digit. */
+export const COMP_ORDER = [
+  "t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9", "t10", "t11", "t12",
+  "big1", "sq", "big2",
+];
+
+export function defaultComps() {
+  const comps = {};
+  COMP_ORDER.forEach((k, i) => {
+    comps[k] = { open: i < 5, lvl: 1, recent: [] };
+  });
+  return comps;
+}
+
+/** Migrate a pre-component global ladder level (1–6) to component state. */
+export function migrateComps(oldLevel) {
+  const comps = defaultComps();
+  const topTable = oldLevel >= 3 ? 12 : oldLevel === 2 ? 10 : 5;
+  for (let n = 1; n <= 12; n++) comps["t" + n].open = n <= topTable;
+  comps.big1.open = oldLevel >= 4;
+  comps.sq.open = oldLevel >= 5;
+  comps.big2.open = oldLevel >= 6;
+  const lvl = Math.min(3, Math.max(1, oldLevel));
+  for (let n = 1; n <= 12; n++) if (comps["t" + n].open) comps["t" + n].lvl = lvl;
+  return comps;
+}
+
+/** Which component a fact belongs to (used for recurring misses). */
+export function componentOf(a, b) {
+  const lo = Math.min(a, b);
+  const hi = Math.max(a, b);
+  if (a === b && a >= 11) return "sq";
+  if (lo >= 11) return "big2";
+  if (hi >= 13) return "big1";
+  return "t" + hi;
+}
+
+/** Rolling accuracy % for a component, or null before COMP_MIN attempts. */
+export function compAccuracy(c) {
+  if (!c || !Array.isArray(c.recent) || c.recent.length < COMP_MIN) return null;
+  return (100 * c.recent.reduce((s, x) => s + x, 0)) / c.recent.length;
+}
+
+/** The n weakest open components; barely-trained ones count as weakest. */
+export function weakestOpen(comps, n = FOCUS_COUNT) {
+  return COMP_ORDER.filter((k) => comps[k] && comps[k].open)
+    .map((k) => ({ k, acc: compAccuracy(comps[k]) }))
+    .sort((x, y) => (x.acc ?? -1) - (y.acc ?? -1))
+    .slice(0, n)
+    .map((o) => o.k);
+}
+
+/** Record one answer into a component's rolling window. */
+export function recordResult(comps, key, ok) {
+  const c = comps[key];
+  if (!c) return;
+  c.recent.push(ok ? 1 : 0);
+  if (c.recent.length > COMP_WINDOW) c.recent.shift();
+}
+
+/**
+ * End-of-session banding: raise a component's level above BAND_UP, lower it
+ * below BAND_DOWN. A component mastered at the top level opens the next
+ * locked component instead. Windows reset on every change so the new
+ * difficulty gets a fresh measurement.
+ */
+export function adjustComponents(comps) {
+  const changes = [];
+  const opened = [];
+  for (const k of COMP_ORDER) {
+    const c = comps[k];
+    if (!c || !c.open) continue;
+    const acc = compAccuracy(c);
+    if (acc === null) continue;
+    if (acc > BAND_UP) {
+      if (c.lvl < COMP_MAX_LVL) {
+        changes.push({ key: k, from: c.lvl, to: c.lvl + 1 });
+        c.lvl++;
+        c.recent = [];
+      } else {
+        const next = COMP_ORDER.find((k2) => comps[k2] && !comps[k2].open);
+        if (next) {
+          comps[next].open = true;
+          opened.push(next);
+          c.recent = [];
+        }
+      }
+    } else if (acc < BAND_DOWN && c.lvl > 1) {
+      changes.push({ key: k, from: c.lvl, to: c.lvl - 1 });
+      c.lvl--;
+      c.recent = [];
+    }
+  }
+  return { changes, opened };
+}
 
 /** Canonical key for a multiplication fact: order-independent. */
 export function factKey(a, b) {
@@ -34,6 +136,24 @@ export function updateWeight(prev, ok, seconds) {
   return Math.round(Math.min(W_MAX, Math.max(W_MIN, w)) * 100) / 100;
 }
 
+/**
+ * Update a fact's record and the recurring-miss queue after an answer.
+ * A miss enters `due` and stays until the fact is solved fast (≤FAST_SEC)
+ * CLEAR_STREAK times in a row; a slow or wrong answer breaks the chain.
+ */
+export function updateFactAfterAnswer(facts, due, key, ok, seconds) {
+  const prev = facts[key] || {};
+  let s = prev.s || 0;
+  if (ok && seconds <= FAST_SEC) s += 1;
+  else s = 0;
+  facts[key] = { w: updateWeight(prev.w, ok, seconds), ok, t: Math.round(seconds * 10) / 10, s };
+  const i = due.indexOf(key);
+  if (!ok) {
+    if (i === -1) due.push(key);
+  } else if (s >= CLEAR_STREAK && i !== -1) due.splice(i, 1);
+  return facts[key];
+}
+
 /** Median of a list of numbers, or null on an empty list. */
 export function median(xs) {
   if (!xs.length) return null;
@@ -42,38 +162,55 @@ export function median(xs) {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
-function atLevel(sessions, level) {
-  return sessions.filter((s) => s.skill === "mul" && s.ladder === level);
-}
-
-/**
- * Progress toward promotion from `level`, over the last PROMO_WINDOW
- * sessions at that level: pooled accuracy ≥ PROMO_ACC and median session
- * speed (median of the sessions' median times) ≤ PROMO_MEDIAN. Both
- * numbers are returned so the UI can show exactly what is missing.
- */
-export function promotionStatus(sessions, level) {
-  const rel = atLevel(sessions, level).slice(-PROMO_WINDOW);
-  const attempted = rel.reduce((n, s) => n + s.attempted, 0);
-  const correct = rel.reduce((n, s) => n + s.correct, 0);
-  const acc = attempted ? Math.round((correct / attempted) * 1000) / 10 : null;
-  const med = median(rel.map((s) => s.med).filter((m) => m != null));
-  const full = rel.length >= PROMO_WINDOW;
-  const accOk = full && acc !== null && acc >= PROMO_ACC;
-  const medOk = full && med !== null && med <= PROMO_MEDIAN;
-  return { count: rel.length, acc, med, accOk, medOk, ready: accOk && medOk && level < LADDER_LEVELS };
-}
-
-/** True when the last two sessions at this level both dipped below SLUMP_ACC. */
-export function slumpActive(sessions, level) {
-  if (level <= 1) return false;
-  const rel = atLevel(sessions, level).slice(-2);
-  return rel.length === 2 && rel.every((s) => s.acc < SLUMP_ACC);
-}
-
 /** Heatmap state for a fact record: green/yellow/red/gray. */
 export function factState(f) {
   if (!f) return "gray";
   if (!f.ok) return "red";
   return f.t <= FAST_SEC ? "green" : "yellow";
+}
+
+/**
+ * Classify a wrong answer. kind: "magnitude" (wrong number of digits),
+ * "carry" (ones digit right, so the carry went wrong), "near" (close miss),
+ * "other". dir: "high"/"low" — which way the answer deviated.
+ */
+export function classifyError(ans, given) {
+  if (typeof given !== "number" || Number.isNaN(given)) return { kind: "other", dir: "low" };
+  const dir = given > ans ? "high" : "low";
+  if (String(Math.abs(given)).length !== String(ans).length) return { kind: "magnitude", dir };
+  if (given % 10 === ans % 10) return { kind: "carry", dir };
+  if (Math.abs(given - ans) <= Math.max(3, Math.round(ans * 0.12))) return { kind: "near", dir };
+  return { kind: "other", dir };
+}
+
+/**
+ * Per-table error-direction tendencies from recent session items, e.g.
+ * "tends to answer low on the 8s table". A table qualifies with ≥minCount
+ * classified errors of which ≥minShare lean the same way.
+ */
+export function errorInsights(sessions, { minCount = 3, minShare = 0.7, maxItems = 300 } = {}) {
+  const perTable = {};
+  let seen = 0;
+  for (let i = sessions.length - 1; i >= 0 && seen < maxItems; i--) {
+    const s = sessions[i];
+    if (s.skill !== "mul" || !Array.isArray(s.items)) continue;
+    for (const it of s.items) {
+      seen++;
+      if (it.given === it.ans || !it.ed) continue;
+      for (const f of [it.a, it.b]) {
+        if (f < 2 || f > 12) continue;
+        const rec = (perTable[f] ||= { high: 0, low: 0 });
+        rec[it.ed]++;
+      }
+    }
+  }
+  const out = [];
+  for (const [tbl, c] of Object.entries(perTable)) {
+    const total = c.high + c.low;
+    if (total < minCount) continue;
+    const dir = c.high >= c.low ? "high" : "low";
+    const share = c[dir] / total;
+    if (share >= minShare) out.push({ table: +tbl, dir, count: total, share: Math.round(share * 100) / 100 });
+  }
+  return out.sort((x, y) => y.count - x.count);
 }

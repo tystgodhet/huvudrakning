@@ -1,6 +1,6 @@
 /* Pure problem generation + technique-tip selection. No DOM, no storage. */
 
-import { factKey, SLUMP_SHARE, LADDER_LEVELS } from "./ladder.js";
+import { COMP_ORDER, DUE_RATE, FOCUS_SHARE, componentOf, factKey, weakestOpen } from "./ladder.js";
 
 export const LEVEL_RANGES = [
   [1, 10],
@@ -20,39 +20,29 @@ function pick(rng, arr) {
   return arr[randInt(rng, 0, arr.length - 1)];
 }
 
-/* ---- multiplication mastery ladder ---- */
+/* ---- multiplication: per-component composition ---- */
 
-/** All facts belonging to a ladder level, as [a, b] pairs. */
-export function ladderPool(level) {
+/** All facts in a component at a given level, as [a, b] pairs. */
+export function componentPool(key, lvl) {
   const pairs = [];
-  if (level <= 3) {
-    const top = level === 1 ? 5 : level === 2 ? 10 : 12;
-    for (let t = 1; t <= top; t++) for (let f = 1; f <= 10; f++) pairs.push([t, f]);
-  } else if (level === 4) {
-    for (let a = 12; a <= 29; a++) for (let b = 3; b <= 9; b++) pairs.push([a, b]);
-  } else if (level === 5) {
-    for (let n = 11; n <= 25; n++) pairs.push([n, n]);
+  if (key[0] === "t") {
+    const t = +key.slice(1);
+    const top = lvl === 1 ? 5 : lvl === 2 ? 10 : 12;
+    for (let f = 1; f <= top; f++) pairs.push([t, f]);
+  } else if (key === "big1") {
+    const [aHi, bHi] = lvl === 1 ? [19, 5] : lvl === 2 ? [29, 9] : [49, 9];
+    for (let a = 12; a <= aHi; a++) for (let b = 3; b <= bHi; b++) pairs.push([a, b]);
+  } else if (key === "sq") {
+    const top = lvl === 1 ? 15 : lvl === 2 ? 20 : 25;
+    for (let n = 11; n <= top; n++) pairs.push([n, n]);
   } else {
-    for (let a = 11; a <= 25; a++) for (let b = a; b <= 25; b++) pairs.push([a, b]);
+    const top = lvl === 1 ? 15 : lvl === 2 ? 19 : 25;
+    for (let a = 11; a <= top; a++) for (let b = a; b <= top; b++) pairs.push([a, b]);
   }
   return pairs;
 }
 
-/**
- * Generate one ladder problem, sampled by per-fact practice weight
- * (default 1). With slump=true, ~SLUMP_SHARE of problems come from the
- * level below — the visible level never moves down.
- * @param {object} opts
- * @param {number} opts.level  ladder level 1–6
- * @param {object} opts.facts  { "3x7": {w, ok, t}, ... }
- * @param {boolean} [opts.slump]
- * @param {function} [opts.rng]
- */
-export function generateLadderProblem({ level, facts = {}, slump = false, rng = Math.random }) {
-  let lvl = Math.min(Math.max(level, 1), LADDER_LEVELS);
-  const fromBelow = slump && lvl > 1 && rng() < SLUMP_SHARE;
-  if (fromBelow) lvl -= 1;
-  const pool = ladderPool(lvl);
+function weightedPick(pool, facts, rng) {
   const ws = pool.map(([a, b]) => {
     const f = facts[factKey(a, b)];
     return f && f.w ? f.w : 1;
@@ -63,9 +53,36 @@ export function generateLadderProblem({ level, facts = {}, slump = false, rng = 
     r -= ws[i];
     if (r < 0) break;
   }
-  let [a, b] = pool[i];
+  return pool[i];
+}
+
+/**
+ * Compose one multiplication problem:
+ *  - recurring misses (`due`) are injected at DUE_RATE until cleared,
+ *  - otherwise ~FOCUS_SHARE of problems come from the two weakest open
+ *    components and the rest is a maintenance mix over everything open,
+ *  - within a component, facts are sampled by practice weight.
+ * @param {object} opts
+ * @param {object} opts.comps  { t2: {open, lvl, recent}, ... }
+ * @param {object} opts.facts  { "3x7": {w, ok, t, s}, ... }
+ * @param {string[]} [opts.due]  fact keys awaiting two fast solves
+ * @param {function} [opts.rng]
+ */
+export function generateComposedProblem({ comps, facts = {}, due = [], rng = Math.random }) {
+  if (due.length && rng() < DUE_RATE) {
+    let [a, b] = due[randInt(rng, 0, due.length - 1)].split("x").map(Number);
+    if (rng() < 0.5) [a, b] = [b, a];
+    return { skill: "mul", a, b, op: "×", ans: a * b, comp: componentOf(a, b), fromDue: true, focus: false };
+  }
+  const open = COMP_ORDER.filter((k) => comps[k] && comps[k].open);
+  const weak = weakestOpen(comps);
+  const useFocus = weak.length > 0 && rng() < FOCUS_SHARE;
+  const key = useFocus
+    ? weak[randInt(rng, 0, weak.length - 1)]
+    : open[randInt(rng, 0, open.length - 1)];
+  let [a, b] = weightedPick(componentPool(key, comps[key].lvl), facts, rng);
   if (rng() < 0.5) [a, b] = [b, a];
-  return { skill: "mul", a, b, op: "×", ans: a * b, ladder: lvl, fromBelow, fromMiss: false };
+  return { skill: "mul", a, b, op: "×", ans: a * b, comp: key, fromDue: false, focus: useFocus };
 }
 
 /* ---- investor mode ----

@@ -17,16 +17,23 @@ served as static files. UI is Swedish by default with an English toggle.
   two-year compounding, and break-even after a drawdown, with adaptive
   levels 1–5 and technique tips (e.g. "the climb back is measured on what's
   left")
-- **Multiplication mastery ladder**: six named levels (tables to 5/10/12,
-  two-digit × one-digit, squares to 25², two-digit × two-digit), next level
-  shown locked. Promotion rewards mastery — ≥95 % accuracy AND median
-  ≤3 s/problem over the last 3 sessions — with live progress toward both
-  bars ("96 % ✓ · 3,4 s av 3,0 s"). Two sessions in a row below 80 %
-  quietly mixes in 30 % problems from the level below; the visible level
-  never moves down. No play-time rewards, no dark patterns.
+- **Per-component multiplication ladder**: 15 components ("deltal") — each
+  times table 1–12, two-digit × one-digit, squares 11–25², two-digit ×
+  two-digit — each with its own level 1–3 and rolling accuracy. The band
+  keeps every component at ~80–85 %: above 85 % the component levels up,
+  below 75 % it levels down; a component mastered at the top level unlocks
+  the next one. No single global level, no play-time rewards, no dark
+  patterns.
+- **Active session composition**: ~70 % of problems come from the two
+  weakest components (the session's "fokus"), 30 % is a maintenance mix
+  over everything unlocked. Missed facts recur (~25 % injection) until
+  solved fast (≤3 s) twice in a row.
 - **Weighted practice**: every fact carries a weight (wrong ×3, slow ×2,
   fast correct ×0.7, floor 0.3) that drives both problem sampling and the
   "worth extra practice" list
+- **Error insights**: every miss is classified (magnitude, carry,
+  near-miss) with its direction, and Tabellkoll surfaces tendencies like
+  "tenderar att svara för lågt på 8:ans tabell"
 - **Mastery heatmap**: per-table grid where each fact is green
   (fast + correct), yellow (correct but slow), red (missed), gray
   (untrained) — plus a squares strip once that level is unlocked
