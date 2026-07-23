@@ -1,7 +1,7 @@
 /* App controller: screens, profiles, config, drill loop, results, progress.
    All pure logic lives in problems/adaptive/stats; this file owns the DOM. */
 
-import { keys, load, save, remove, exportProfile, parseImport } from "./storage.js";
+import { keys, load, save, remove, exportProfile, exportAnalysis, sessionsToCSV, parseImport } from "./storage.js";
 import { T, tipText, problemText } from "./i18n.js";
 import { generateProblem, generateLadderProblem, tipFor } from "./problems.js";
 import { nextLevel, isAdaptiveSkill } from "./adaptive.js";
@@ -188,19 +188,48 @@ $("npAdd").onclick = () => {
 };
 
 /* ============ export / import ============ */
+function download(filename, text, type) {
+  const blob = new Blob([text], { type });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function nameSlug() {
+  return currentProfile.name.toLowerCase().replace(/[^a-z0-9åäö]+/gi, "-").replace(/^-|-$/g, "") || "profil";
+}
+
+function dateStamp() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 $("exportBtn").onclick = () => {
   if (!currentProfile) {
     show("profiles");
     return;
   }
   const data = exportProfile(currentProfile, pstate, sessions);
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  const slug = currentProfile.name.toLowerCase().replace(/[^a-z0-9åäö]+/gi, "-").replace(/^-|-$/g, "") || "profil";
-  a.download = `huvudrakning-${slug}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  download(`huvudrakning-${nameSlug()}.json`, JSON.stringify(data, null, 2), "application/json");
+};
+
+// pseudonymized share: results + times, but no name or avatar
+$("analysisBtn").onclick = () => {
+  if (!currentProfile) {
+    show("profiles");
+    return;
+  }
+  const data = exportAnalysis(currentProfile, pstate, sessions);
+  download(`huvudrakning-analys-${dateStamp()}.json`, JSON.stringify(data, null, 2), "application/json");
+};
+
+$("csvBtn").onclick = () => {
+  if (!currentProfile) {
+    show("profiles");
+    return;
+  }
+  download(`huvudrakning-tal-${dateStamp()}.csv`, sessionsToCSV(sessions), "text/csv");
 };
 
 $("importBtn").onclick = () => $("importFile").click();
