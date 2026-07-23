@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateProblem, generateLadderProblem, ladderPool, tipFor, LEVEL_RANGES, INVEST_LEVEL_KINDS } from "../js/problems.js";
+import { generateProblem, generateComposedProblem, componentPool, tipFor, LEVEL_RANGES, INVEST_LEVEL_KINDS } from "../js/problems.js";
+import { defaultComps, recordResult } from "../js/ladder.js";
 
 // deterministic rng (mulberry32)
 function seeded(seed) {
@@ -98,67 +99,79 @@ test("misses from another skill are not resampled", () => {
   assert.equal(p.fromMiss, false);
 });
 
-test("ladder problems stay within each level's fact pool and are correct", () => {
-  const inPool = (level, a, b) => {
-    const lo = Math.min(a, b);
-    const hi = Math.max(a, b);
-    if (level <= 3) {
-      const top = level === 1 ? 5 : level === 2 ? 10 : 12;
-      return (lo <= top && hi <= 10) || (hi <= top && lo <= 10);
-    }
-    if (level === 4) return lo >= 3 && lo <= 9 && hi >= 12 && hi <= 29;
-    if (level === 5) return a === b && a >= 11 && a <= 25;
-    return lo >= 11 && hi <= 25;
-  };
-  for (let level = 1; level <= 6; level++) {
-    const rng = seeded(level * 31);
-    for (let i = 0; i < 300; i++) {
-      const p = generateLadderProblem({ level, rng });
-      assert.equal(p.skill, "mul");
-      assert.equal(p.ans, p.a * p.b);
-      assert.equal(p.ladder, level);
-      assert.equal(p.fromBelow, false);
-      assert.ok(inPool(level, p.a, p.b), `${p.a}×${p.b} outside level ${level}`);
-    }
+test("component pools stay within their level's bounds", () => {
+  for (const [key, lvl, check] of [
+    ["t7", 1, ([a, b]) => a === 7 && b >= 1 && b <= 5],
+    ["t7", 2, ([a, b]) => a === 7 && b <= 10],
+    ["t7", 3, ([a, b]) => a === 7 && b <= 12],
+    ["big1", 1, ([a, b]) => a >= 12 && a <= 19 && b >= 3 && b <= 5],
+    ["big1", 3, ([a, b]) => a >= 12 && a <= 49 && b >= 3 && b <= 9],
+    ["sq", 2, ([a, b]) => a === b && a >= 11 && a <= 20],
+    ["big2", 1, ([a, b]) => a >= 11 && b <= 15],
+  ]) {
+    assert.ok(componentPool(key, lvl).every(check), `${key} lvl ${lvl} out of bounds`);
+    assert.ok(componentPool(key, lvl).length > 0);
   }
 });
 
-test("high-weight facts are sampled far more often", () => {
-  const facts = { "7x8": { w: 27, ok: false, t: 8 } };
+test("composition: ~70% of problems come from the two weakest components", () => {
+  const comps = defaultComps();
+  // t1/t2/t3 strong, t4 weak, t5 untrained → focus = t5 + t4
+  for (const k of ["t1", "t2", "t3"]) for (let i = 0; i < 20; i++) recordResult(comps, k, true);
+  for (let i = 0; i < 20; i++) recordResult(comps, "t4", i < 10);
+  const rng = seeded(23);
+  let focusHits = 0;
+  const N = 2000;
+  for (let i = 0; i < N; i++) {
+    const p = generateComposedProblem({ comps, rng });
+    assert.equal(p.ans, p.a * p.b);
+    if (p.focus) {
+      focusHits++;
+      assert.ok(["t4", "t5"].includes(p.comp), `focus problem from ${p.comp}`);
+    }
+  }
+  const rate = focusHits / N;
+  assert.ok(rate > 0.6 && rate < 0.8, `focus rate ${rate} not ≈0.7`);
+});
+
+test("recurring misses are injected until cleared, from the due queue", () => {
+  const comps = defaultComps();
+  const due = ["7x8"];
+  const rng = seeded(5);
+  let dueHits = 0;
+  const N = 2000;
+  for (let i = 0; i < N; i++) {
+    const p = generateComposedProblem({ comps, due, rng });
+    if (p.fromDue) {
+      dueHits++;
+      assert.deepEqual([Math.min(p.a, p.b), Math.max(p.a, p.b)], [7, 8]);
+      assert.equal(p.comp, "t8");
+    }
+  }
+  const rate = dueHits / N;
+  assert.ok(rate > 0.18 && rate < 0.32, `due rate ${rate} not ≈0.25`);
+  // empty queue → never fromDue
+  const p = generateComposedProblem({ comps, due: [], rng });
+  assert.equal(p.fromDue, false);
+});
+
+test("high-weight facts are sampled far more often within a component", () => {
+  const comps = defaultComps();
+  for (let i = 0; i < 20; i++) recordResult(comps, "t2", true); // make t2 non-focus-only pool matter less
+  const facts = { "2x3": { w: 27, ok: false, t: 8 } };
   const rng = seeded(3);
   let hits = 0;
-  const N = 1000;
+  let t2Count = 0;
+  const N = 3000;
   for (let i = 0; i < N; i++) {
-    const p = generateLadderProblem({ level: 2, facts, rng });
-    if (Math.min(p.a, p.b) === 7 && Math.max(p.a, p.b) === 8) hits++;
+    const p = generateComposedProblem({ comps, facts, rng });
+    if (p.comp !== "t2") continue;
+    t2Count++;
+    if (Math.min(p.a, p.b) === 2 && Math.max(p.a, p.b) === 3) hits++;
   }
-  // uniform would be ~2 %, weighted expectation is ~26 %
-  assert.ok(hits / N > 0.12, `weighted fact hit rate ${hits / N} too low`);
-});
-
-test("slump mixes in ~30% problems from the level below, never above", () => {
-  const rng = seeded(17);
-  let below = 0;
-  const N = 1000;
-  for (let i = 0; i < N; i++) {
-    const p = generateLadderProblem({ level: 3, slump: true, rng });
-    if (p.fromBelow) {
-      below++;
-      assert.equal(p.ladder, 2);
-    } else assert.equal(p.ladder, 3);
-  }
-  const rate = below / N;
-  assert.ok(rate > 0.2 && rate < 0.4, `fromBelow rate ${rate} not ≈0.3`);
-  // no slump on level 1 even when flagged
-  const p1 = generateLadderProblem({ level: 1, slump: true, rng });
-  assert.equal(p1.fromBelow, false);
-});
-
-test("ladder pools have the expected sizes", () => {
-  assert.equal(ladderPool(1).length, 50);
-  assert.equal(ladderPool(2).length, 100);
-  assert.equal(ladderPool(3).length, 120);
-  assert.equal(ladderPool(5).length, 15);
+  assert.ok(t2Count > 50, "t2 barely sampled");
+  // uniform within t2's level-1 pool (5 facts) would be 20%; weight 27 → ~87%
+  assert.ok(hits / t2Count > 0.5, `weighted fact share ${hits / t2Count} too low`);
 });
 
 test("square and two-digit tips are numerically consistent", () => {

@@ -3,19 +3,23 @@
 
 import { keys, load, save, remove, exportProfile, exportAnalysis, sessionsToCSV, parseImport } from "./storage.js";
 import { T, tipText, problemText } from "./i18n.js";
-import { generateProblem, generateLadderProblem, tipFor } from "./problems.js";
+import { generateProblem, generateComposedProblem, tipFor } from "./problems.js";
 import { nextLevel, isAdaptiveSkill } from "./adaptive.js";
 import {
-  LADDER_LEVELS,
-  PROMO_ACC,
-  PROMO_MEDIAN,
-  PROMO_WINDOW,
+  COMP_MAX_LVL,
+  COMP_ORDER,
+  adjustComponents,
+  classifyError,
+  compAccuracy,
+  defaultComps,
+  errorInsights,
   factKey,
   factState,
   median,
-  promotionStatus,
-  slumpActive,
-  updateWeight,
+  migrateComps,
+  recordResult,
+  updateFactAfterAnswer,
+  weakestOpen,
 } from "./ladder.js";
 import { dayStreak, personalBest, thenVsNow, masteryByTable } from "./stats.js";
 import { sessionChartSVG } from "./charts.js";
@@ -50,7 +54,7 @@ function t(key) {
 function defaultState() {
   return {
     levels: { add: 1, sub: 1, invest: 1 },
-    ladder: { level: 1, facts: {} },
+    ladder: { comps: defaultComps(), facts: {}, due: [] },
     misses: [],
     config: { skill: "mul", tables: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], duration: DEFAULT_DURATION },
   };
@@ -58,11 +62,19 @@ function defaultState() {
 
 function normalizeState(s) {
   const d = defaultState();
+  // profiles from the global-ladder era migrate their level to components
+  const comps =
+    s?.ladder?.comps && typeof s.ladder.comps === "object"
+      ? { ...defaultComps(), ...s.ladder.comps }
+      : s?.ladder?.level
+        ? migrateComps(s.ladder.level)
+        : defaultComps();
   return {
     levels: { ...d.levels, ...(s?.levels || {}) },
     ladder: {
-      level: Math.min(Math.max(s?.ladder?.level || 1, 1), LADDER_LEVELS),
+      comps,
       facts: s?.ladder?.facts && typeof s.ladder.facts === "object" ? s.ladder.facts : {},
+      due: Array.isArray(s?.ladder?.due) ? s.ladder.due : [],
     },
     misses: Array.isArray(s?.misses) ? s.misses.slice(-MISS_CAP) : [],
     config: { ...d.config, ...(s?.config || {}) },
@@ -274,8 +286,10 @@ function renderSkillGrid() {
     const b = document.createElement("button");
     b.className = "skill-btn" + (pstate.config.skill === s ? " selected" : "");
     let lvlTxt;
-    if (s === "mul") lvlTxt = `${t("lvl")} ${pstate.ladder.level}/${LADDER_LEVELS}`;
-    else if (s === "div") lvlTxt = `${pstate.config.tables.length} ${t("tables")}`;
+    if (s === "mul") {
+      const open = COMP_ORDER.filter((k) => pstate.ladder.comps[k]?.open).length;
+      lvlTxt = `${open}/${COMP_ORDER.length} ${t("parts")}`;
+    } else if (s === "div") lvlTxt = `${pstate.config.tables.length} ${t("tables")}`;
     else if (s === "mix") lvlTxt = `${t("lvl")} ${pstate.levels.add}/${pstate.levels.sub}`;
     else lvlTxt = `${t("lvl")} ${pstate.levels[s]}`;
     b.innerHTML = `<div class="big">${SKILL_ICONS[s]}</div><div class="name">${T[lang].skills[s]}</div><div class="lvl">${lvlTxt}</div>`;
@@ -294,41 +308,37 @@ function renderSkillGrid() {
   if (showLadder) renderLadder();
 }
 
-/* Named mastery ladder: completed levels checked, current highlighted with
-   live progress toward both promotion bars, upcoming levels locked. */
+/* Per-component ladder: every "deltal" shows its own level as pips, the
+   two weakest (the session focus) are marked, locked ones show a padlock. */
 function renderLadder() {
   const host = $("ladderList");
   host.innerHTML = "";
-  const cur = pstate.ladder.level;
-  const names = T[lang].ladderNames;
-  for (let i = 1; i <= LADDER_LEVELS; i++) {
-    const row = document.createElement("div");
-    row.className = "ladder-row" + (i === cur ? " current" : i > cur ? " locked" : " done");
-    const icon = i < cur ? "✓" : i === cur ? "▶" : "🔒";
-    let html = `<span class="ladder-ic">${icon}</span><div class="ladder-body"><span class="ladder-name">${names[i - 1]}</span>`;
-    if (i === cur) {
-      const st = promotionStatus(sessions, cur);
-      const accTxt =
-        st.acc === null
-          ? `– ${t("ofTarget")} ${PROMO_ACC} %`
-          : st.accOk
-            ? `${fmtNum(st.acc)} % ✓`
-            : `${fmtNum(st.acc)} % ${t("ofTarget")} ${PROMO_ACC} %`;
-      const medTxt =
-        st.med === null
-          ? `– ${t("ofTarget")} ${fmtSec(PROMO_MEDIAN)}`
-          : st.medOk
-            ? `${fmtSec(st.med)} ✓`
-            : `${fmtSec(st.med)} ${t("ofTarget")} ${fmtSec(PROMO_MEDIAN)}`;
-      let line = `${accTxt} · ${medTxt}`;
-      if (st.count < PROMO_WINDOW) line += ` · ${t("passCount")(st.count, PROMO_WINDOW)}`;
-      if (cur === LADDER_LEVELS && st.accOk && st.medOk) line = `🏆 ${t("ladderDone")}`;
-      html += `<span class="ladder-progress">${line}</span>`;
+  const comps = pstate.ladder.comps;
+  const weak = weakestOpen(comps);
+
+  const focusLine = document.createElement("p");
+  focusLine.className = "sub ladder-focus";
+  focusLine.textContent = `🎯 ${t("focusNow")} ${weak.map((k) => t("compShort")(k)).join(" & ")}`;
+  host.appendChild(focusLine);
+
+  const grid = document.createElement("div");
+  grid.className = "comp-grid";
+  for (const k of COMP_ORDER) {
+    const c = comps[k];
+    const chip = document.createElement("div");
+    if (!c?.open) {
+      chip.className = "comp-chip locked";
+      chip.innerHTML = `<span>${t("compShort")(k)}</span><span class="pips">🔒</span>`;
+    } else {
+      const acc = compAccuracy(c);
+      const pips = Array.from({ length: COMP_MAX_LVL }, (_, i) => (i < c.lvl ? "●" : "○")).join("");
+      chip.className = "comp-chip" + (weak.includes(k) ? " focus" : "");
+      chip.title = acc === null ? "" : `${Math.round(acc)} %`;
+      chip.innerHTML = `<span>${t("compShort")(k)}</span><span class="pips">${pips}</span>`;
     }
-    html += "</div>";
-    row.innerHTML = html;
-    host.appendChild(row);
+    grid.appendChild(chip);
   }
+  host.appendChild(grid);
 }
 
 function renderTables() {
@@ -397,8 +407,7 @@ function startDrill() {
   drill = {
     skill,
     level: isAdaptiveSkill(skill) ? pstate.levels[skill] : null,
-    ladderLevel: skill === "mul" ? pstate.ladder.level : null,
-    slump: skill === "mul" ? slumpActive(sessions, pstate.ladder.level) : false,
+    focus: skill === "mul" ? weakestOpen(pstate.ladder.comps) : null,
     duration,
     deadline: Date.now() + duration * 1000,
     attempted: 0,
@@ -415,7 +424,7 @@ function startDrill() {
   };
   $("drillSkillLbl").textContent =
     skill === "mul"
-      ? T[lang].ladderNames[drill.ladderLevel - 1]
+      ? `${t("focusLbl")}: ${drill.focus.map((k) => t("compShort")(k)).join(" & ")}`
       : T[lang].skills[skill] + (isAdaptiveSkill(skill) ? ` · ${t("lvl")} ${drill.level}` : "");
   $("fbChip").textContent = "";
   $("tipEl").className = "tip";
@@ -454,7 +463,7 @@ function nextProblem() {
   if (!drill) return;
   drill.current =
     drill.skill === "mul"
-      ? generateLadderProblem({ level: drill.ladderLevel, facts: pstate.ladder.facts, slump: drill.slump })
+      ? generateComposedProblem({ comps: pstate.ladder.comps, facts: pstate.ladder.facts, due: pstate.ladder.due })
       : generateProblem({
           skill: drill.skill,
           levels: pstate.levels,
@@ -514,17 +523,24 @@ function submit() {
   drill.attempted++;
   drill.locked = true;
   const ok = val === p.ans;
-  // full per-problem log so a session can be replayed in the detail view
-  drill.items.push({ skill: p.skill, a: p.a, b: p.b, op: p.op, ans: p.ans, given: val, ms: Math.round(dt * 1000), at: Date.now() });
+  // full per-problem log so a session can be replayed in the detail view;
+  // wrong answers also get an error class + direction for pattern insights
+  const item = { skill: p.skill, a: p.a, b: p.b, op: p.op, ans: p.ans, given: val, ms: Math.round(dt * 1000), at: Date.now() };
+  if (p.comp) item.comp = p.comp;
+  if (!ok) {
+    const cls = classifyError(p.ans, val);
+    item.ek = cls.kind;
+    item.ed = cls.dir;
+  }
+  drill.items.push(item);
   // instant feedback: right/wrong + time, always against the clock, never a sound
   const fb = $("fbChip");
   fb.textContent = (ok ? "✓ " : "✗ ") + fmtSec(dt);
   fb.className = "fb-chip " + (ok ? "ok" : "bad");
-  // ladder practice weights: wrong ×3, slow ×2, fast correct ×0.7
+  // per-component rolling accuracy + practice weights + miss recurrence
   if (drill.skill === "mul") {
-    const k = factKey(p.a, p.b);
-    const prev = pstate.ladder.facts[k];
-    pstate.ladder.facts[k] = { w: updateWeight(prev && prev.w, ok, dt), ok, t: Math.round(dt * 10) / 10 };
+    if (p.comp) recordResult(pstate.ladder.comps, p.comp, ok);
+    updateFactAfterAnswer(pstate.ladder.facts, pstate.ladder.due, factKey(p.a, p.b), ok, dt);
   }
   const zone = $("drillZone");
   if (ok) {
@@ -572,7 +588,7 @@ function endDrill() {
     at: Date.now(),
     skill: d.skill,
     level: isAdaptiveSkill(d.skill) ? d.level : null,
-    ladder: d.skill === "mul" ? d.ladderLevel : null,
+    focus: d.skill === "mul" ? d.focus : null,
     tables: ["div", "mix"].includes(d.skill) ? [...pstate.config.tables] : null,
     duration: d.duration,
     attempted: d.attempted,
@@ -585,16 +601,9 @@ function endDrill() {
   };
   sessions.push(rec); // append-only, never overwrite
 
-  // ladder promotion: mastery over the last PROMO_WINDOW sessions
-  let promotedTo = null;
-  let ladderMastered = false;
-  if (d.skill === "mul") {
-    const st = promotionStatus(sessions, d.ladderLevel);
-    if (st.ready) {
-      promotedTo = d.ladderLevel + 1;
-      pstate.ladder.level = promotedTo;
-    } else if (d.ladderLevel === LADDER_LEVELS && st.accOk && st.medOk) ladderMastered = true;
-  }
+  // per-component banding: hold each "deltal" in the 80–85 % accuracy band
+  let compResult = { changes: [], opened: [] };
+  if (d.skill === "mul") compResult = adjustComponents(pstate.ladder.comps);
 
   save(keys.sessions(currentProfile.id), sessions);
   persistState();
@@ -604,7 +613,8 @@ function endDrill() {
   $("resAvg").textContent = d.times.length ? rec.avg + "s" : "–";
   $("resLvl").textContent =
     d.skill === "mul"
-      ? `${d.ladderLevel}/${LADDER_LEVELS}` + (promotedTo ? " ↑" : "")
+      ? `${COMP_ORDER.filter((k) => pstate.ladder.comps[k]?.open).length}/${COMP_ORDER.length}` +
+        (compResult.opened.length ? " ↑" : "")
       : isAdaptiveSkill(d.skill)
         ? newLevel + (newLevel > d.level ? " ↑" : newLevel < d.level ? " ↓" : "")
         : pstate.config.tables.length + " " + t("tables");
@@ -612,10 +622,16 @@ function endDrill() {
   pb.style.display = isPB ? "block" : "none";
   pb.textContent = "🏅 " + t("newPB");
   const promo = $("promoBanner");
-  promo.style.display = promotedTo || ladderMastered ? "block" : "none";
-  promo.textContent = promotedTo
-    ? `🔓 ${t("unlocked")} ${T[lang].ladderNames[promotedTo - 1]}`
-    : `🏆 ${t("ladderDone")}`;
+  const promoBits = [];
+  if (compResult.opened.length)
+    promoBits.push(`🔓 ${t("unlocked")} ${compResult.opened.map((k) => t("compName")(k)).join(", ")}`);
+  compResult.changes.forEach((c) =>
+    promoBits.push(
+      `${c.to > c.from ? "⬆️" : "🛟"} ${t("compName")(c.key)} ${c.to > c.from ? t("compUp") : t("compDown")} ${c.to}`
+    )
+  );
+  promo.style.display = promoBits.length ? "block" : "none";
+  promo.innerHTML = promoBits.map(escapeHtml).join("<br>");
 
   // session summary vs the player's OWN average — never vs other profiles
   const vs = $("vsAvg");
@@ -787,9 +803,9 @@ function renderHeatmap(host) {
   }
   host.appendChild(grid);
 
-  // squares strip once that level is in reach
+  // squares strip once that component is in reach
   const anySquare = Array.from({ length: 15 }, (_, i) => i + 11).some((n) => facts[factKey(n, n)]);
-  if ((pstate && pstate.ladder.level >= 5) || anySquare) {
+  if ((pstate && pstate.ladder.comps.sq?.open) || anySquare) {
     const cap = document.createElement("div");
     cap.className = "hm-cap";
     cap.textContent = t("squaresLbl") + " 11–25";
@@ -815,6 +831,17 @@ function renderHeatmap(host) {
     `<span><i class="hm-cell hm-gray"></i>${t("hmNew")}</span>`,
   ].join("");
   host.appendChild(leg);
+
+  // error-direction tendencies, e.g. "tends to answer low on the 8s table"
+  const insights = errorInsights(sessions).slice(0, 2);
+  if (insights.length) {
+    const box = document.createElement("div");
+    box.className = "hm-insights";
+    box.innerHTML = insights
+      .map((i) => `📉 ${escapeHtml(t("insight")({ dir: i.dir, name: t("compName")("t" + i.table), count: i.count }))}`)
+      .join("<br>");
+    host.appendChild(box);
+  }
 }
 
 function renderSessList() {

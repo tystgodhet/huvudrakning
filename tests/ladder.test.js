@@ -3,34 +3,35 @@ import assert from "node:assert/strict";
 import {
   factKey,
   updateWeight,
+  updateFactAfterAnswer,
   median,
-  promotionStatus,
-  slumpActive,
   factState,
+  defaultComps,
+  migrateComps,
+  componentOf,
+  compAccuracy,
+  weakestOpen,
+  recordResult,
+  adjustComponents,
+  classifyError,
+  errorInsights,
   W_MIN,
   W_MAX,
-  LADDER_LEVELS,
+  COMP_ORDER,
 } from "../js/ladder.js";
-
-function sess(over) {
-  return { skill: "mul", ladder: 1, attempted: 20, correct: 20, acc: 100, med: 2.0, ...over };
-}
 
 test("factKey is order-independent", () => {
   assert.equal(factKey(3, 7), "3x7");
   assert.equal(factKey(7, 3), "3x7");
-  assert.equal(factKey(12, 12), "12x12");
 });
 
 test("weights: wrong ×3, slow ×2, fast correct ×0.7, with floor and cap", () => {
-  assert.equal(updateWeight(undefined, false, 2), 3); // 1 × 3
-  assert.equal(updateWeight(3, true, 6), 6); // slow (>5 s) × 2
-  assert.equal(updateWeight(6, true, 2), 4.2); // fast correct × 0.7
-  // repeated fast answers bottom out at the floor, never zero
+  assert.equal(updateWeight(undefined, false, 2), 3);
+  assert.equal(updateWeight(3, true, 6), 6);
+  assert.equal(updateWeight(6, true, 2), 4.2);
   let w = 1;
   for (let i = 0; i < 10; i++) w = updateWeight(w, true, 1);
   assert.equal(w, W_MIN);
-  // repeated misses top out at the cap
   w = 1;
   for (let i = 0; i < 10; i++) w = updateWeight(w, false, 1);
   assert.equal(w, W_MAX);
@@ -42,52 +43,130 @@ test("median handles odd, even and empty lists", () => {
   assert.equal(median([]), null);
 });
 
-test("promotion requires 3 sessions at the level with ≥95% pooled acc and median ≤3 s", () => {
-  const good = [sess({ correct: 19, acc: 95, med: 2.8 }), sess({ med: 2.5 }), sess({ med: 3.0 })];
-  const st = promotionStatus(good, 1);
-  assert.equal(st.ready, true);
-  assert.equal(st.accOk, true);
-  assert.equal(st.medOk, true);
-
-  // only two sessions → not yet, but progress numbers are exposed
-  const two = promotionStatus(good.slice(0, 2), 1);
-  assert.equal(two.ready, false);
-  assert.equal(two.count, 2);
-  assert.ok(two.acc !== null && two.med !== null);
-
-  // pooled accuracy below 95 blocks promotion even with fast times
-  const slowAcc = [sess({ correct: 16, acc: 80 }), sess(), sess()];
-  assert.equal(promotionStatus(slowAcc, 1).ready, false); // 56/60 ≈ 93.3 %
-
-  // median above 3.0 blocks promotion even with perfect accuracy
-  const slowMed = [sess({ med: 3.4 }), sess({ med: 3.5 }), sess({ med: 3.6 })];
-  const stSlow = promotionStatus(slowMed, 1);
-  assert.equal(stSlow.ready, false);
-  assert.equal(stSlow.accOk, true);
-  assert.equal(stSlow.medOk, false);
-
-  // sessions at other levels or skills do not count
-  const other = [sess({ ladder: 2 }), sess({ skill: "add", ladder: undefined }), sess()];
-  assert.equal(promotionStatus(other, 1).count, 1);
-
-  // the top level has nothing to promote to
-  const top = [sess({ ladder: LADDER_LEVELS }), sess({ ladder: LADDER_LEVELS }), sess({ ladder: LADDER_LEVELS })];
-  const stTop = promotionStatus(top, LADDER_LEVELS);
-  assert.equal(stTop.ready, false);
-  assert.equal(stTop.accOk && stTop.medOk, true);
-});
-
-test("slump activates after two sessions in a row below 80%, never on level 1", () => {
-  const dip = [sess({ ladder: 2, acc: 75 }), sess({ ladder: 2, acc: 70 })];
-  assert.equal(slumpActive(dip, 2), true);
-  assert.equal(slumpActive([sess({ ladder: 2, acc: 75 }), sess({ ladder: 2, acc: 85 })], 2), false);
-  assert.equal(slumpActive([sess({ ladder: 2, acc: 75 })], 2), false);
-  assert.equal(slumpActive([sess({ acc: 10 }), sess({ acc: 10 })], 1), false);
-});
-
 test("fact heatmap states", () => {
   assert.equal(factState(undefined), "gray");
   assert.equal(factState({ ok: false, t: 1.2 }), "red");
   assert.equal(factState({ ok: true, t: 2.9 }), "green");
   assert.equal(factState({ ok: true, t: 4.5 }), "yellow");
+});
+
+test("default components open the first five tables; migration honors old levels", () => {
+  const d = defaultComps();
+  assert.ok(d.t5.open && !d.t6.open && !d.big1.open);
+  const m = migrateComps(4);
+  assert.ok(m.t12.open && m.big1.open && !m.sq.open);
+  assert.equal(m.t8.lvl, 3);
+});
+
+test("componentOf attributes facts correctly", () => {
+  assert.equal(componentOf(3, 7), "t7");
+  assert.equal(componentOf(12, 5), "t12");
+  assert.equal(componentOf(14, 6), "big1");
+  assert.equal(componentOf(13, 13), "sq");
+  assert.equal(componentOf(13, 17), "big2");
+});
+
+test("band: >85% raises a component's level, <75% lowers it, in between holds", () => {
+  const mk = (oks) => {
+    const comps = defaultComps();
+    oks.forEach((ok) => recordResult(comps, "t3", ok));
+    return comps;
+  };
+  // 18/20 = 90% → up, window resets
+  let comps = mk(Array(18).fill(true).concat([false, false]));
+  let r = adjustComponents(comps);
+  assert.deepEqual(r.changes, [{ key: "t3", from: 1, to: 2 }]);
+  assert.equal(comps.t3.recent.length, 0);
+  // 14/20 = 70% → down (from level 2)
+  comps = mk(Array(14).fill(true).concat(Array(6).fill(false)));
+  comps.t3.lvl = 2;
+  r = adjustComponents(comps);
+  assert.deepEqual(r.changes, [{ key: "t3", from: 2, to: 1 }]);
+  // 16/20 = 80% → hold (the target band)
+  comps = mk(Array(16).fill(true).concat(Array(4).fill(false)));
+  comps.t3.lvl = 2;
+  r = adjustComponents(comps);
+  assert.deepEqual(r.changes, []);
+  assert.equal(comps.t3.lvl, 2);
+  // level 1 never drops below 1
+  comps = mk(Array(20).fill(false));
+  r = adjustComponents(comps);
+  assert.equal(comps.t3.lvl, 1);
+  // fewer than COMP_MIN attempts → no action
+  comps = defaultComps();
+  recordResult(comps, "t3", true);
+  assert.deepEqual(adjustComponents(comps).changes, []);
+});
+
+test("a component mastered at top level opens the next locked component", () => {
+  const comps = defaultComps();
+  comps.t3.lvl = 3;
+  for (let i = 0; i < 20; i++) recordResult(comps, "t3", true);
+  const r = adjustComponents(comps);
+  assert.deepEqual(r.opened, ["t6"]);
+  assert.ok(comps.t6.open);
+  assert.equal(comps.t3.lvl, 3);
+});
+
+test("weakest components: barely-trained count as weakest, then lowest accuracy", () => {
+  const comps = defaultComps();
+  for (let i = 0; i < 20; i++) recordResult(comps, "t1", true);
+  for (let i = 0; i < 20; i++) recordResult(comps, "t2", i < 10);
+  for (let i = 0; i < 20; i++) recordResult(comps, "t3", i < 18);
+  for (let i = 0; i < 20; i++) recordResult(comps, "t4", i < 16);
+  // t5 untrained → weakest; t2 at 50% next
+  assert.deepEqual(weakestOpen(comps), ["t5", "t2"]);
+});
+
+test("misses recur until solved fast twice in a row", () => {
+  const facts = {};
+  const due = [];
+  const k = "7x8";
+  updateFactAfterAnswer(facts, due, k, false, 2); // miss → due
+  assert.deepEqual(due, [k]);
+  updateFactAfterAnswer(facts, due, k, true, 2); // fast ×1 → still due
+  assert.deepEqual(due, [k]);
+  updateFactAfterAnswer(facts, due, k, true, 7); // slow correct breaks the chain
+  assert.equal(facts[k].s, 0);
+  assert.deepEqual(due, [k]);
+  updateFactAfterAnswer(facts, due, k, true, 2);
+  updateFactAfterAnswer(facts, due, k, true, 2); // fast ×2 in a row → cleared
+  assert.deepEqual(due, []);
+  // a new miss re-enters the queue
+  updateFactAfterAnswer(facts, due, k, false, 2);
+  assert.deepEqual(due, [k]);
+});
+
+test("error classification: magnitude, carry, near, direction", () => {
+  assert.deepEqual(classifyError(56, 560), { kind: "magnitude", dir: "high" });
+  assert.deepEqual(classifyError(56, 5), { kind: "magnitude", dir: "low" });
+  assert.deepEqual(classifyError(56, 46), { kind: "carry", dir: "low" });
+  assert.deepEqual(classifyError(56, 54), { kind: "near", dir: "low" });
+  assert.deepEqual(classifyError(56, 58), { kind: "near", dir: "high" });
+  assert.deepEqual(classifyError(56, 71), { kind: "other", dir: "high" });
+  assert.equal(classifyError(56, NaN).kind, "other");
+});
+
+test("error insights find a dominant direction per table", () => {
+  const items = [
+    { a: 8, b: 6, ans: 48, given: 42, ed: "low" },
+    { a: 8, b: 7, ans: 56, given: 54, ed: "low" },
+    { a: 4, b: 8, ans: 32, given: 24, ed: "low" },
+    { a: 8, b: 9, ans: 72, given: 81, ed: "high" },
+    { a: 3, b: 5, ans: 15, given: 15 }, // correct — ignored
+  ];
+  const sessions = [{ skill: "mul", items }];
+  const out = errorInsights(sessions, { minCount: 3, minShare: 0.7 });
+  const t8 = out.find((i) => i.table === 8);
+  assert.ok(t8, "no insight for table 8");
+  assert.equal(t8.dir, "low");
+  assert.equal(t8.count, 4);
+  assert.equal(t8.share, 0.75);
+  // tables with too few classified errors stay silent
+  assert.equal(out.find((i) => i.table === 6), undefined);
+});
+
+test("COMP_ORDER unlocks tables before the advanced components", () => {
+  assert.equal(COMP_ORDER[0], "t1");
+  assert.deepEqual(COMP_ORDER.slice(-3), ["big1", "sq", "big2"]);
 });
