@@ -71,6 +71,9 @@ h2{font-size:22px; margin:14px 0 10px; letter-spacing:-0.02em;}
 .tip{background:#FFF6DE; border:1.5px solid #F1D998; border-radius:14px; padding:10px 14px; font-size:14px; margin:10px 0 0; display:none;}
 .tip.show{display:block;}
 
+.keypad.disabled{opacity:.35; pointer-events:none;}
+.next-btn{margin-top:14px;}
+
 .fb-chip{font-variant-numeric:tabular-nums; font-size:14px; font-weight:700;}
 .fb-chip.ok{color:var(--green);}
 .fb-chip.bad{color:var(--red);}

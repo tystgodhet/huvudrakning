@@ -154,6 +154,25 @@ export function updateFactAfterAnswer(facts, due, key, ok, seconds) {
   return facts[key];
 }
 
+export const RETRY_MIN = 2; // a missed problem returns after 2–4 problems,
+export const RETRY_MAX = 4; // while the memory trace from the review is fresh
+
+/** Queue a just-missed problem for a guaranteed quick reappearance. */
+export function scheduleRetry(retries, problem, rng = Math.random) {
+  const gap = RETRY_MIN + Math.floor(rng() * (RETRY_MAX - RETRY_MIN + 1));
+  retries.push({ p: problem, gap });
+}
+
+/**
+ * Call once per new problem slot: counts every queued retry down and
+ * returns a problem whose turn has come, or null.
+ */
+export function nextRetry(retries) {
+  for (const r of retries) r.gap--;
+  const i = retries.findIndex((r) => r.gap <= 0);
+  return i === -1 ? null : retries.splice(i, 1)[0].p;
+}
+
 /** Median of a list of numbers, or null on an empty list. */
 export function median(xs) {
   if (!xs.length) return null;

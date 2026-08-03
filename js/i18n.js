@@ -81,6 +81,7 @@ export const T = {
     noDetails: "Det här passet saknar detaljdata (spelat före uppdateringen).",
     allClean: "Inga fel eller långsamma svar — snyggt!",
     youAnswered: "du svarade",
+    nextProblem: "Nästa tal →",
     probs: {
       invPercentOf: (p) => `${p.a} % av ${p.b}?`,
       invChangeUp: (p) => `Från ${p.a} till ${p.b} — uppgång i %?`,
@@ -202,6 +203,7 @@ export const T = {
     noDetails: "This session has no per-problem details (played before this update).",
     allClean: "No misses or slow answers — nice!",
     youAnswered: "you answered",
+    nextProblem: "Next problem →",
     probs: {
       invPercentOf: (p) => `${p.a}% of ${p.b}?`,
       invChangeUp: (p) => `From ${p.a} to ${p.b} — gain in %?`,
