@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import * as ladderApi from "../js/ladder.js";
 import {
   factKey,
   updateWeight,
@@ -164,6 +165,24 @@ test("error insights find a dominant direction per table", () => {
   assert.equal(t8.share, 0.75);
   // tables with too few classified errors stay silent
   assert.equal(out.find((i) => i.table === 6), undefined);
+});
+
+test("missed problems get a guaranteed retry after 2-4 problems", () => {
+  const { scheduleRetry, nextRetry, RETRY_MIN, RETRY_MAX } = ladderApi;
+  const retries = [];
+  scheduleRetry(retries, { a: 7, b: 8 }, () => 0); // rng 0 → gap RETRY_MIN
+  assert.equal(retries[0].gap, RETRY_MIN);
+  scheduleRetry(retries, { a: 6, b: 9 }, () => 0.999); // rng ~1 → gap RETRY_MAX
+  assert.equal(retries[1].gap, RETRY_MAX);
+  // first slot: both count down, none ready yet (gaps 1 and 3)
+  assert.equal(nextRetry(retries), null);
+  // second slot: the first miss is due
+  assert.deepEqual(nextRetry(retries), { a: 7, b: 8 });
+  // the second miss follows two slots later
+  assert.equal(nextRetry(retries), null);
+  assert.deepEqual(nextRetry(retries), { a: 6, b: 9 });
+  assert.equal(retries.length, 0);
+  assert.equal(nextRetry(retries), null);
 });
 
 test("COMP_ORDER unlocks tables before the advanced components", () => {

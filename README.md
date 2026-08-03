@@ -42,8 +42,14 @@ served as static files. UI is Swedish by default with an English toggle.
   profiles
 - **Scope per session**: individual tables 1–12 (or "upp till 10:an"-style
   shortcuts) for ÷; difficulty levels 1–5 for +/− controlling number ranges
-- **Timed drills**: 60/90/120 s (default 90), on-screen keypad, hardware
-  keyboard also works
+- **Timed drills on pure solve time**: 60/90/120 s (default 90) where the
+  clock only runs while a problem is on screen. A miss opens a self-paced
+  review (problem, answer key, your answer, technique tip) that stays until
+  "Nästa tal" is pressed — the clock pauses, so understanding a mistake is
+  never punished. The missed problem is guaranteed to return within 2–4
+  problems while the memory trace is fresh. On-screen keypad, hardware
+  keyboard also works. Personal bests and "then vs now" compare pure-time
+  sessions only; older wall-clock records stay archived.
 - **Adaptive levels** for +/−/investing: after a session with ≥5 attempts,
   >85 % accuracy levels up, <70 % levels down (targets an ~75–85 % success
   band)

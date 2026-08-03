@@ -17,7 +17,9 @@ import {
   factState,
   median,
   migrateComps,
+  nextRetry,
   recordResult,
+  scheduleRetry,
   updateFactAfterAnswer,
   weakestOpen,
 } from "./ladder.js";
@@ -34,7 +36,6 @@ const DEFAULT_DURATION = 90;
 const MISS_CAP = 60;
 const ANSWER_MAX_LEN = 5;
 const FEEDBACK_OK_MS = 250;
-const FEEDBACK_MISS_MS = 2600;
 
 let lang = load(keys.lang) || "sv";
 let profiles = load(keys.profiles) || [];
@@ -409,12 +410,14 @@ function startDrill() {
     level: isAdaptiveSkill(skill) ? pstate.levels[skill] : null,
     focus: skill === "mul" ? weakestOpen(pstate.ladder.comps) : null,
     duration,
-    deadline: Date.now() + duration * 1000,
+    solveMs: 0, // accumulated pure solve time — the session clock
+    running: false, // false while feedback/review shows: the clock is paused
     attempted: 0,
     correct: 0,
     times: [],
     misses: [],
     items: [],
+    retries: [], // missed problems awaiting their guaranteed comeback
     current: null,
     input: "",
     locked: false,
@@ -428,6 +431,8 @@ function startDrill() {
       : T[lang].skills[skill] + (isAdaptiveSkill(skill) ? ` · ${t("lvl")} ${drill.level}` : "");
   $("fbChip").textContent = "";
   $("tipEl").className = "tip";
+  $("nextBtn").style.display = "none";
+  $("keypad").classList.remove("disabled");
   buildKeypad();
   nextProblem();
   show("drill");
@@ -445,8 +450,11 @@ function initFuse() {
   tickDrill();
 }
 
+/* The session clock counts pure solve time only: it runs while a problem
+   is on screen awaiting an answer and pauses during feedback and review. */
 function remainingSec() {
-  return Math.max(0, (drill.deadline - Date.now()) / 1000);
+  const solving = drill.running ? Date.now() - drill.pStart : 0;
+  return Math.max(0, (drill.duration * 1000 - drill.solveMs - solving) / 1000);
 }
 
 function tickDrill() {
@@ -461,8 +469,11 @@ function tickDrill() {
 
 function nextProblem() {
   if (!drill) return;
-  drill.current =
-    drill.skill === "mul"
+  // a just-missed problem takes its guaranteed comeback slot when due
+  const retry = nextRetry(drill.retries);
+  drill.current = retry
+    ? { ...retry, fromRetry: true }
+    : drill.skill === "mul"
       ? generateComposedProblem({ comps: pstate.ladder.comps, facts: pstate.ladder.facts, due: pstate.ladder.due })
       : generateProblem({
           skill: drill.skill,
@@ -473,6 +484,7 @@ function nextProblem() {
   drill.input = "";
   drill.locked = false;
   drill.pStart = Date.now();
+  drill.running = true;
   $("tipEl").className = "tip";
   const p = drill.current;
   const el = $("problemEl");
@@ -510,6 +522,10 @@ function press(k) {
 
 window.addEventListener("keydown", (e) => {
   if (!$("scr-drill").classList.contains("visible")) return;
+  if ($("nextBtn").style.display === "block") {
+    if (e.key === "Enter" || e.key === " ") advanceReview();
+    return;
+  }
   if (e.key >= "0" && e.key <= "9") press(e.key);
   else if (e.key === "Backspace") press("⌫");
   else if (e.key === "Enter") press("OK");
@@ -520,6 +536,8 @@ function submit() {
   const p = drill.current;
   const val = parseInt(drill.input, 10);
   const dt = (Date.now() - drill.pStart) / 1000;
+  drill.solveMs += dt * 1000; // bank the solve time; the clock pauses now
+  drill.running = false;
   drill.attempted++;
   drill.locked = true;
   const ok = val === p.ans;
@@ -554,15 +572,28 @@ function submit() {
     drill.misses.push({ a: p.a, b: p.b, op: p.op, ans: p.ans, given: val, skill: p.skill });
     pstate.misses.push({ a: p.a, b: p.b, op: p.op, ans: p.ans, skill: p.skill });
     if (pstate.misses.length > MISS_CAP) pstate.misses = pstate.misses.slice(-MISS_CAP);
+    // self-paced review: clock stays paused until "Nästa tal" is pressed,
+    // and the same problem is queued to return within a few problems
+    scheduleRetry(drill.retries, { skill: p.skill, a: p.a, b: p.b, op: p.op, ans: p.ans, comp: p.comp });
     zone.className = "flash-bad";
     $("problemEl").textContent = problemText(lang, p) + (p.skill === "invest" ? ` → ${p.ans}` : ` = ${p.ans}`);
     const tip = $("tipEl");
     tip.textContent = "💡 " + tipText(lang, tipFor(p));
     tip.className = "tip show";
-    drill.feedbackTimeout = setTimeout(nextProblem, FEEDBACK_MISS_MS);
+    $("keypad").classList.add("disabled");
+    $("nextBtn").style.display = "block";
   }
   $("drillCount").textContent = `${drill.correct} ✓ · ${Math.ceil(remainingSec())}s`;
 }
+
+function advanceReview() {
+  if (!drill) return;
+  $("nextBtn").style.display = "none";
+  $("keypad").classList.remove("disabled");
+  nextProblem();
+}
+
+$("nextBtn").onclick = advanceReview;
 
 function endDrill() {
   if (!drill) return;
@@ -580,12 +611,15 @@ function endDrill() {
     pstate.levels[d.skill] = newLevel;
   }
 
-  // personal best = most correct in a session for this skill, before this one
-  const prev = personalBest(sessions, d.skill);
+  // personal best = most correct in a session for this skill, before this
+  // one — compared within pure-time sessions only (old wall-clock records
+  // measured something else and stay archived)
+  const prev = personalBest(sessions.filter((s) => s.pure), d.skill);
   const isPB = d.correct > 0 && d.correct > (prev ? prev.bestCorrect : 0);
 
   const rec = {
     at: Date.now(),
+    pure: true, // session clock counted pure solve time (review was free)
     skill: d.skill,
     level: isAdaptiveSkill(d.skill) ? d.level : null,
     focus: d.skill === "mul" ? d.focus : null,
@@ -635,7 +669,7 @@ function endDrill() {
 
   // session summary vs the player's OWN average — never vs other profiles
   const vs = $("vsAvg");
-  const prior = sessions.slice(0, -1).filter((s) => s.skill === d.skill);
+  const prior = sessions.slice(0, -1).filter((s) => s.skill === d.skill && s.pure);
   const priorSpd = prior.filter((s) => s.avg > 0);
   if (prior.length && d.attempted && d.times.length && priorSpd.length) {
     const accAvg = Math.round(prior.reduce((n, s) => n + s.acc, 0) / prior.length);
@@ -705,7 +739,7 @@ function renderProgress() {
   const data = sessions.filter((s) => s.skill === progSkill).slice(-14);
   $("chartTitle").textContent = T[lang].skills[progSkill];
 
-  const best = personalBest(sessions, progSkill);
+  const best = personalBest(sessions.filter((s) => s.pure), progSkill);
   $("pbLine").textContent = best
     ? `🏅 ${t("pb")}: ${best.bestCorrect} ${t("correctWord")}` + (best.bestAvg !== null ? ` · ${best.bestAvg} ${t("perProblem")}` : "")
     : "";
@@ -721,7 +755,7 @@ function renderProgress() {
 
 function renderThenNow() {
   const card = $("tnCard");
-  const tn = thenVsNow(sessions, progSkill);
+  const tn = thenVsNow(sessions.filter((s) => s.pure), progSkill);
   if (!tn) {
     card.style.display = "none";
     return;
