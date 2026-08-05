@@ -3,7 +3,17 @@
 
 import { keys, load, save, remove, exportProfile, exportAnalysis, sessionsToCSV, parseImport } from "./storage.js";
 import { T, tipText, problemText } from "./i18n.js";
-import { generateProblem, generateComposedProblem, tipFor } from "./problems.js";
+import { generateProblem, generateComposedProblem, componentPool, tipFor } from "./problems.js";
+import {
+  MUL_PROBES,
+  PLACE_FAST_SEC,
+  PLACE_PER_SKILL,
+  PLACE_START_LVL,
+  PLACE_TIMEOUT_SEC,
+  maxOpenTable,
+  mulPlacement,
+  stepLevel,
+} from "./placement.js";
 import { nextLevel, isAdaptiveSkill } from "./adaptive.js";
 import {
   COMP_MAX_LVL,
@@ -116,7 +126,7 @@ function applyLang() {
 }
 
 /* ============ navigation ============ */
-const SCREENS = ["profiles", "home", "drill", "result", "progress", "sessdetail"];
+const SCREENS = ["profiles", "home", "drill", "result", "progress", "sessdetail", "place"];
 function show(name) {
   SCREENS.forEach((s) => $("scr-" + s).classList.toggle("visible", s === name));
   const navMap = { home: "nav-home", progress: "nav-progress", sessdetail: "nav-progress", profiles: "nav-profiles" };
@@ -197,7 +207,7 @@ $("npAdd").onclick = () => {
   save(keys.profiles, profiles);
   $("npName").value = "";
   selectProfile(p.id);
-  show("home");
+  startPlacement(); // Duolingo-style: find the right starting level first
 };
 
 /* ============ export / import ============ */
@@ -265,6 +275,158 @@ $("importFile").onchange = async (e) => {
   } catch {
     alert(t("importErr"));
   }
+};
+
+/* ============ placement test ============ */
+/* Measurement, not practice: no misses, weights, sessions or streaks are
+   produced, and there is no red/green judgment during the test. */
+let placing = null;
+
+function startPlacement() {
+  placing = { stage: "add", lvl: PLACE_START_LVL, done: 0, results: {}, probeIdx: 0, probeHits: 0, probeCount: 0, count: 0, input: "", pStart: 0, timeout: null, current: null };
+  $("placeIntro").style.display = "block";
+  $("placeRun").style.display = "none";
+  $("placeDone").style.display = "none";
+  show("place");
+}
+
+function endPlacement() {
+  if (placing) clearTimeout(placing.timeout);
+  placing = null;
+}
+
+$("placeSkip").onclick = () => {
+  endPlacement();
+  show("home");
+};
+
+$("placeStart").onclick = () => {
+  $("placeIntro").style.display = "none";
+  $("placeRun").style.display = "block";
+  const kp = $("pKeypad");
+  kp.innerHTML = "";
+  ["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "OK"].forEach((k) => {
+    const b = document.createElement("button");
+    b.className = "key" + (k === "OK" ? " ok action" : k === "⌫" ? " action" : "");
+    b.textContent = k;
+    b.onclick = () => placePress(k);
+    kp.appendChild(b);
+  });
+  nextPlaceProblem();
+};
+
+function placeGen() {
+  if (placing.stage !== "mul") {
+    return generateProblem({ skill: placing.stage, levels: { [placing.stage]: placing.lvl } });
+  }
+  const key = MUL_PROBES[placing.probeIdx];
+  if (key === "big1") {
+    const pool = componentPool("big1", 1);
+    const [a, b] = pool[Math.floor(Math.random() * pool.length)];
+    return { skill: "mul", a, b, op: "×", ans: a * b };
+  }
+  const tbl = +key.slice(1);
+  const f = 3 + Math.floor(Math.random() * 7);
+  const [a, b] = Math.random() < 0.5 ? [tbl, f] : [f, tbl];
+  return { skill: "mul", a, b, op: "×", ans: a * b };
+}
+
+function nextPlaceProblem() {
+  if (!placing) return;
+  if (!$("scr-place").classList.contains("visible")) {
+    endPlacement(); // the user navigated away mid-test
+    return;
+  }
+  placing.current = placeGen();
+  placing.input = "";
+  placing.count++;
+  const p = placing.current;
+  $("pProblem").textContent = `${p.a} ${p.op} ${p.b}`;
+  $("pMeta").textContent = `${t("placeItem")} ${placing.count} · ${T[lang].skills[placing.stage]}`;
+  renderPlaceInput();
+  placing.pStart = Date.now();
+  clearTimeout(placing.timeout);
+  placing.timeout = setTimeout(() => answerPlace(NaN, PLACE_TIMEOUT_SEC + 1), PLACE_TIMEOUT_SEC * 1000);
+}
+
+function renderPlaceInput() {
+  $("pAnswer").innerHTML = escapeHtml(placing.input) + '<span class="caret"></span>';
+}
+
+function placePress(k) {
+  if (!placing) return;
+  if (k === "⌫") placing.input = placing.input.slice(0, -1);
+  else if (k === "OK") {
+    if (placing.input === "") return;
+    answerPlace(parseInt(placing.input, 10), (Date.now() - placing.pStart) / 1000);
+    return;
+  } else if (placing.input.length < ANSWER_MAX_LEN) placing.input += k;
+  renderPlaceInput();
+}
+
+function answerPlace(val, secs) {
+  if (!placing) return;
+  clearTimeout(placing.timeout);
+  const ok = val === placing.current.ans;
+  if (placing.stage !== "mul") {
+    placing.lvl = stepLevel(placing.lvl, ok, secs);
+    placing.done++;
+    if (placing.done >= PLACE_PER_SKILL) {
+      placing.results[placing.stage] = placing.lvl;
+      if (placing.stage === "add") {
+        placing.stage = "sub";
+        placing.lvl = PLACE_START_LVL;
+        placing.done = 0;
+      } else {
+        placing.stage = "mul";
+      }
+    }
+  } else {
+    placing.probeCount++;
+    if (ok && secs <= PLACE_FAST_SEC) placing.probeHits++;
+    if (placing.probeCount === 2) {
+      const passed = placing.probeHits === 2;
+      placing.probeCount = 0;
+      placing.probeHits = 0;
+      if (passed) placing.probeIdx++;
+      if (!passed || placing.probeIdx >= MUL_PROBES.length) {
+        finishPlacement(placing.probeIdx);
+        return;
+      }
+    }
+  }
+  nextPlaceProblem();
+}
+
+function finishPlacement(mulPassed) {
+  placing.results.mulPassed = mulPassed;
+  $("placeRun").style.display = "none";
+  $("placeDone").style.display = "block";
+  const comps = mulPlacement(mulPassed);
+  const bits = [
+    `${T[lang].skills.add} ${t("lvl").toLowerCase()} ${placing.results.add}`,
+    `${T[lang].skills.sub} ${t("lvl").toLowerCase()} ${placing.results.sub}`,
+    t("placeTables")(maxOpenTable(comps)),
+  ];
+  if (comps.big1.open) bits.push(t("placeBig1"));
+  $("placeSummary").textContent = `${t("placeYouStart")} ${bits.join(" · ")}`;
+}
+
+$("placeApply").onclick = () => {
+  if (!placing || !pstate) return;
+  pstate.levels.add = placing.results.add;
+  pstate.levels.sub = placing.results.sub;
+  pstate.ladder.comps = mulPlacement(placing.results.mulPassed);
+  persistState();
+  endPlacement();
+  renderHome();
+  show("home");
+};
+
+$("retakeBtn").onclick = () => {
+  if (!currentProfile) return;
+  if (!confirm(t("retakeConfirm"))) return;
+  startPlacement();
 };
 
 /* ============ home / config ============ */
@@ -521,6 +683,12 @@ function press(k) {
 }
 
 window.addEventListener("keydown", (e) => {
+  if ($("scr-place").classList.contains("visible") && placing && $("placeRun").style.display === "block") {
+    if (e.key >= "0" && e.key <= "9") placePress(e.key);
+    else if (e.key === "Backspace") placePress("⌫");
+    else if (e.key === "Enter") placePress("OK");
+    return;
+  }
   if (!$("scr-drill").classList.contains("visible")) return;
   if ($("nextBtn").style.display === "block") {
     if (e.key === "Enter" || e.key === " ") advanceReview();

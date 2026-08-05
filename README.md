@@ -11,6 +11,12 @@ served as static files. UI is Swedish by default with an English toggle.
 ## Features
 
 - **Local profiles** (name + avatar emoji), multiple kids on one device
+- **Placement test** for new profiles, Duolingo-style: a skippable 2–3
+  minute adaptive test (staircase for +/−, rising probes for the tables)
+  that sets the starting levels — rounding down on uncertainty, leaving no
+  trace in stats, and phrased so it can't be failed. Retakable later from
+  the profile screen; a retake resets levels but never touches history,
+  streak, heatmap or weights.
 - **Skills**: addition, subtraction, multiplication, division, mixed, and an
   **investor mode** — the mental math investors actually use: percentages of
   amounts, percent up/down moves, the rule of 72, dividend yield, P/E ratios,

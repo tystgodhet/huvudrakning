@@ -52,6 +52,12 @@
       <p class="sub" style="margin:8px 0 0; font-size:12px;" data-i="shareHint"></p>
       <input type="file" id="importFile" accept="application/json,.json" hidden>
     </div>
+    <div class="card">
+      <b data-i="levelCardTitle">Nivåtest</b>
+      <div class="io-row">
+        <button id="retakeBtn" data-i="retakeTest">Gör om nivåtestet</button>
+      </div>
+    </div>
   </section>
 
   <!-- HOME / CONFIG -->
@@ -144,6 +150,27 @@
     <div class="card">
       <b data-i="lastSessions">Senaste passen</b>
       <div id="sessList"></div>
+    </div>
+  </section>
+
+  <!-- PLACEMENT TEST -->
+  <section class="screen" id="scr-place">
+    <div id="placeIntro">
+      <h2 data-i="placeTitle">Vi hittar din startnivå</h2>
+      <p class="sub" data-i="placeIntroTxt"></p>
+      <button class="start-btn" id="placeStart" data-i="placeStartBtn">Starta testet</button>
+      <button class="quit" id="placeSkip" data-i="placeSkipBtn">Hoppa över – börja från början</button>
+    </div>
+    <div id="placeRun" style="display:none;">
+      <p class="sub" id="pMeta" style="text-align:center;"></p>
+      <div class="problem" id="pProblem"></div>
+      <div class="answer-line" id="pAnswer"><span class="caret"></span></div>
+      <div class="keypad" id="pKeypad"></div>
+    </div>
+    <div id="placeDone" style="display:none;">
+      <h2 data-i="placeDoneTitle">Klart!</h2>
+      <p id="placeSummary" style="font-size:17px; line-height:1.5;"></p>
+      <button class="start-btn" id="placeApply" data-i="placeApplyBtn">Börja träna</button>
     </div>
   </section>
 
