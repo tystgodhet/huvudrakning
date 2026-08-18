@@ -23,6 +23,21 @@ served as static files. UI is Swedish by default with an English toggle.
   two-year compounding, and break-even after a drawdown, with adaptive
   levels 1–5 and technique tips (e.g. "the climb back is measured on what's
   left")
+- **The path**: the multiplication ladder drawn as a Duolingo-style winding
+  trail of nodes — stars for each component's level, a pulsing ring on the
+  current focus, padlocks ahead, gold nodes behind. Purely a presentation of
+  real mastery state; there is nothing to buy or grind.
+- **Mästarprov (gold)**: a component at its top level can be challenged —
+  10 problems in a row, all correct, each under 3 s — to turn its node gold.
+  Failing costs nothing and leaves no trace; gold is revoked if the accuracy
+  band later lowers the component, so gold is a live claim, not a trophy.
+- **Daily quests**: up to three mastery-framed goals per day generated from
+  the player's actual weaknesses ("5 fast correct in the 8s table", "settle
+  3 old misses", "do a session"). The reward is a checkmark and confetti —
+  never XP, currency, shortcuts or play-time credit.
+- **Celebrations**: confetti and banner pops for mastery moments only —
+  level ups, unlocks, personal bests, completed quests and gold runs.
+  Respects `prefers-reduced-motion`.
 - **Per-component multiplication ladder**: 15 components ("deltal") — each
   times table 1–12, two-digit × one-digit, squares 11–25², two-digit ×
   two-digit — each with its own level 1–3 and rolling accuracy. The band
@@ -148,6 +163,7 @@ css/style.css         styles (mobile-first, safe-area aware)
 js/app.js             DOM controller: screens, drill loop, rendering
 js/problems.js        pure: problem generation, miss resampling, tip selection
 js/adaptive.js        pure: level up/down rules
+js/quests.js          pure: daily quest generation + progress
 js/stats.js           pure: streak, personal bests, mastery, then-vs-now
 js/i18n.js            sv/en copy incl. tip templates
 js/storage.js         localStorage wrapper + export/import

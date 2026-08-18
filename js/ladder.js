@@ -119,9 +119,22 @@ export function adjustComponents(comps) {
       changes.push({ key: k, from: c.lvl, to: c.lvl - 1 });
       c.lvl--;
       c.recent = [];
+      if (c.gold) c.gold = false; // gold is a live claim, not a trophy case
     }
   }
   return { changes, opened };
+}
+
+/* ---- mästarprov (gold) ----
+   A voluntary challenge that gilds a component on the path: GOLD_N problems
+   in a row, every one correct and solved within GOLD_FAST_SEC. Pure speed +
+   precision — failing costs nothing and leaves no trace. */
+export const GOLD_N = 10;
+export const GOLD_FAST_SEC = 3;
+
+/** A component can be challenged once it sits open at the top level. */
+export function goldEligible(c) {
+  return !!(c && c.open && c.lvl === COMP_MAX_LVL && !c.gold);
 }
 
 /** Canonical key for a multiplication fact: order-independent. */

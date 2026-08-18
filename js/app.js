@@ -18,6 +18,8 @@ import { nextLevel, isAdaptiveSkill } from "./adaptive.js";
 import {
   COMP_MAX_LVL,
   COMP_ORDER,
+  GOLD_FAST_SEC,
+  GOLD_N,
   adjustComponents,
   classifyError,
   compAccuracy,
@@ -25,6 +27,7 @@ import {
   errorInsights,
   factKey,
   factState,
+  goldEligible,
   median,
   migrateComps,
   nextRetry,
@@ -33,6 +36,7 @@ import {
   updateFactAfterAnswer,
   weakestOpen,
 } from "./ladder.js";
+import { allQuestsDone, dayKey, generateQuests, questEvent, questsStale } from "./quests.js";
 import { dayStreak, personalBest, thenVsNow, masteryByTable } from "./stats.js";
 import { sessionChartSVG } from "./charts.js";
 
@@ -67,6 +71,7 @@ function defaultState() {
     levels: { add: 1, sub: 1, invest: 1 },
     ladder: { comps: defaultComps(), facts: {}, due: [] },
     misses: [],
+    quests: null, // {day, list} — regenerated when the day changes
     config: { skill: "mul", tables: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], duration: DEFAULT_DURATION },
   };
 }
@@ -88,6 +93,7 @@ function normalizeState(s) {
       due: Array.isArray(s?.ladder?.due) ? s.ladder.due : [],
     },
     misses: Array.isArray(s?.misses) ? s.misses.slice(-MISS_CAP) : [],
+    quests: s?.quests && typeof s.quests === "object" ? s.quests : null,
     config: { ...d.config, ...(s?.config || {}) },
   };
 }
@@ -104,6 +110,57 @@ function fmtSec(x) {
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+/* ============ celebrations ============ */
+/* Juice reserved for mastery moments (level up, unlock, gold, PB, quest) —
+   never for raw play time. Skipped under prefers-reduced-motion. */
+const CF_COLORS = ["#2B50E0", "#2FA36B", "#FFC53D", "#E5484D", "#9B59E0"];
+
+function reducedMotion() {
+  return window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function celebrate(n = 70) {
+  if (reducedMotion()) return;
+  const host = $("cfHost");
+  for (let i = 0; i < n; i++) {
+    const s = document.createElement("i");
+    s.className = "cf";
+    s.style.left = Math.random() * 100 + "%";
+    s.style.background = CF_COLORS[i % CF_COLORS.length];
+    s.style.animationDelay = (Math.random() * 0.5).toFixed(2) + "s";
+    s.style.animationDuration = (1.4 + Math.random() * 1.3).toFixed(2) + "s";
+    s.style.setProperty("--rot", Math.round(Math.random() * 720 - 360) + "deg");
+    s.style.setProperty("--drift", Math.round(Math.random() * 140 - 70) + "px");
+    s.addEventListener("animationend", () => s.remove());
+    host.appendChild(s);
+  }
+}
+
+/** Show a result banner with a small pop-in. */
+function showBanner(el, html) {
+  el.style.display = "block";
+  el.innerHTML = html;
+  el.classList.remove("pop");
+  void el.offsetWidth;
+  el.classList.add("pop");
+}
+
+/** Animate a number counting up (used for the result hero). */
+function countUp(el, to) {
+  if (to <= 0 || reducedMotion()) {
+    el.textContent = to;
+    return;
+  }
+  const t0 = performance.now();
+  const dur = 600;
+  const step = (now) => {
+    const f = Math.min(1, (now - t0) / dur);
+    el.textContent = Math.round(to * (1 - Math.pow(1 - f, 3)));
+    if (f < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 /* ============ i18n ============ */
@@ -437,8 +494,45 @@ function renderHello() {
 
 function renderHome() {
   renderSkillGrid();
+  renderQuests();
   renderDurations();
   renderStartBtn();
+}
+
+/* ============ daily quests ============ */
+function ensureQuests() {
+  if (!pstate) return;
+  const day = dayKey();
+  if (questsStale(pstate.quests, day)) {
+    pstate.quests = generateQuests({ comps: pstate.ladder.comps, due: pstate.ladder.due, misses: pstate.misses }, day);
+    persistState();
+  }
+}
+
+function questLabel(q) {
+  if (q.type === "session") return t("questSession");
+  if (q.type === "fastFocus") return T[lang].questFastFocus({ n: q.target, name: t("compShort")(q.comp) });
+  if (q.type === "clearMiss") return T[lang].questClearMiss({ n: q.target });
+  return T[lang].questFastAny({ n: q.target });
+}
+
+function renderQuests() {
+  const card = $("questCard");
+  if (!pstate) {
+    card.style.display = "none";
+    return;
+  }
+  ensureQuests();
+  card.style.display = "block";
+  const host = $("questList");
+  host.innerHTML = "";
+  pstate.quests.list.forEach((q) => {
+    const done = q.done >= q.target;
+    const row = document.createElement("div");
+    row.className = "q-row" + (done ? " done" : "");
+    row.innerHTML = `<span class="q-check">${done ? "✅" : "⬜️"}</span><span class="q-lbl">${escapeHtml(questLabel(q))}</span><span class="q-prog">${Math.min(q.done, q.target)}/${q.target}</span>`;
+    host.appendChild(row);
+  });
 }
 
 function renderSkillGrid() {
@@ -471,8 +565,13 @@ function renderSkillGrid() {
   if (showLadder) renderLadder();
 }
 
-/* Per-component ladder: every "deltal" shows its own level as pips, the
-   two weakest (the session focus) are marked, locked ones show a padlock. */
+/* The ladder as a Duolingo-style winding path: one node per component,
+   snaking down the card. Stars show the node's level, 🔒 locked, 👑 gold,
+   a pulsing ring marks the session focus. A node at the top level can be
+   tapped to attempt its mästarprov. */
+const PATH_STEP = 78; // vertical rhythm px per node
+const NODE_R = 31;
+
 function renderLadder() {
   const host = $("ladderList");
   host.innerHTML = "";
@@ -484,24 +583,71 @@ function renderLadder() {
   focusLine.textContent = `🎯 ${t("focusNow")} ${weak.map((k) => t("compShort")(k)).join(" & ")}`;
   host.appendChild(focusLine);
 
-  const grid = document.createElement("div");
-  grid.className = "comp-grid";
-  for (const k of COMP_ORDER) {
-    const c = comps[k];
-    const chip = document.createElement("div");
-    if (!c?.open) {
-      chip.className = "comp-chip locked";
-      chip.innerHTML = `<span>${t("compShort")(k)}</span><span class="pips">🔒</span>`;
-    } else {
-      const acc = compAccuracy(c);
-      const pips = Array.from({ length: COMP_MAX_LVL }, (_, i) => (i < c.lvl ? "●" : "○")).join("");
-      chip.className = "comp-chip" + (weak.includes(k) ? " focus" : "");
-      chip.title = acc === null ? "" : `${Math.round(acc)} %`;
-      chip.innerHTML = `<span>${t("compShort")(k)}</span><span class="pips">${pips}</span>`;
+  const wrap = document.createElement("div");
+  wrap.className = "path-wrap";
+  const path = document.createElement("div");
+  path.className = "path";
+  path.style.height = COMP_ORDER.length * PATH_STEP + "px";
+  const pt = (i) => ({ x: 50 + 34 * Math.sin((i * Math.PI) / 3), y: i * PATH_STEP + PATH_STEP / 2 });
+
+  COMP_ORDER.forEach((k, i) => {
+    if (i) {
+      // dotted trail interpolated toward the previous node
+      const prev = pt(i - 1);
+      const here = pt(i);
+      for (const f of [0.28, 0.5, 0.72]) {
+        const d = document.createElement("i");
+        d.className = "path-dot";
+        d.style.left = `calc(${prev.x + (here.x - prev.x) * f}% - 2.5px)`;
+        d.style.top = prev.y + (here.y - prev.y) * f - 2.5 + "px";
+        path.appendChild(d);
+      }
     }
-    grid.appendChild(chip);
+    const { x, y } = pt(i);
+    const c = comps[k];
+    const b = document.createElement("button");
+    b.type = "button";
+    const cls = ["path-node"];
+    let stars;
+    if (!c?.open) {
+      cls.push("locked");
+      stars = "🔒";
+    } else if (c.gold) {
+      cls.push("gold");
+      stars = "👑";
+    } else {
+      cls.push("open-node");
+      stars = "★".repeat(c.lvl) + "☆".repeat(COMP_MAX_LVL - c.lvl);
+      if (weak.includes(k)) cls.push("focus");
+      if (goldEligible(c)) cls.push("ready");
+    }
+    b.className = cls.join(" ");
+    b.style.left = `calc(${x}% - ${NODE_R}px)`;
+    b.style.top = y - NODE_R + "px";
+    const acc = c?.open ? compAccuracy(c) : null;
+    if (acc !== null) b.title = `${Math.round(acc)} %`;
+    b.innerHTML = `<span class="pn-lbl">${t("compNode")(k)}</span><span class="pn-stars">${stars}</span>`;
+    if (goldEligible(c)) {
+      b.onclick = () => {
+        if (confirm(T[lang].goldConfirm({ name: t("compName")(k), n: GOLD_N, sec: GOLD_FAST_SEC }))) startGold(k);
+      };
+    }
+    path.appendChild(b);
+  });
+  wrap.appendChild(path);
+  host.appendChild(wrap);
+
+  const ready = COMP_ORDER.filter((k) => goldEligible(comps[k]));
+  if (ready.length) {
+    const hint = document.createElement("p");
+    hint.className = "sub gold-hint";
+    hint.textContent = `👑 ${t("goldReady")} ${ready.map((k) => t("compShort")(k)).join(", ")}`;
+    host.appendChild(hint);
   }
-  host.appendChild(grid);
+
+  // keep the frontier in view: scroll to the first focus node
+  const focusIdx = COMP_ORDER.findIndex((k) => weak.includes(k));
+  if (focusIdx > 1) wrap.scrollTop = focusIdx * PATH_STEP - 110;
 }
 
 function renderTables() {
@@ -558,13 +704,24 @@ function renderStartBtn() {
 }
 
 /* ============ drill ============ */
+let goldRetry = null; // comp key when the result screen offers a challenge retry
+
 $("startBtn").onclick = () => startDrill();
-$("againBtn").onclick = () => startDrill();
+$("againBtn").onclick = () => (goldRetry ? startGold(goldRetry) : startDrill());
 $("homeBtn").onclick = () => show("home");
-$("quitBtn").onclick = () => endDrill();
+$("quitBtn").onclick = () => {
+  // quitting a mästarprov just abandons it — no record, no penalty
+  if (drill && drill.gold) {
+    clearTimeout(drill.feedbackTimeout);
+    drill = null;
+    show("home");
+  } else endDrill();
+};
 
 function startDrill() {
   if (!pstate) return;
+  goldRetry = null;
+  ensureQuests();
   const skill = pstate.config.skill;
   const duration = pstate.config.duration || DEFAULT_DURATION;
   drill = {
@@ -580,6 +737,7 @@ function startDrill() {
     misses: [],
     items: [],
     retries: [], // missed problems awaiting their guaranteed comeback
+    questsDone: [], // quests completed during this session, cheered at the end
     current: null,
     input: "",
     locked: false,
@@ -612,6 +770,105 @@ function initFuse() {
   tickDrill();
 }
 
+/* ---- mästarprov (gold challenge) ----
+   GOLD_N problems in a row from one top-level component; every answer must
+   be correct and within GOLD_FAST_SEC. No clock, no session record, no
+   weight or miss updates — pure speed + precision, and failing is free. */
+function startGold(key) {
+  if (!pstate) return;
+  goldRetry = null;
+  drill = {
+    gold: key,
+    goldDone: 0,
+    skill: "mul",
+    current: null,
+    input: "",
+    locked: false,
+    pStart: 0,
+    running: false,
+    feedbackTimeout: null,
+  };
+  $("drillSkillLbl").textContent = `👑 ${t("goldLbl")} · ${t("compShort")(key)}`;
+  $("fbChip").textContent = "";
+  $("tipEl").className = "tip";
+  $("nextBtn").style.display = "none";
+  $("keypad").classList.remove("disabled");
+  const f = $("fuse"); // the bar fills with progress instead of burning down
+  f.style.transition = "none";
+  f.style.width = "0%";
+  f.classList.remove("low");
+  void f.offsetWidth;
+  f.style.transition = "";
+  $("drillCount").textContent = `0/${GOLD_N}`;
+  buildKeypad();
+  nextProblem();
+  show("drill");
+}
+
+function goldProblem(key) {
+  const pool = componentPool(key, COMP_MAX_LVL);
+  const last = drill.current ? factKey(drill.current.a, drill.current.b) : null;
+  let pair = pool[Math.floor(Math.random() * pool.length)];
+  while (pool.length > 1 && factKey(pair[0], pair[1]) === last) {
+    pair = pool[Math.floor(Math.random() * pool.length)];
+  }
+  let [a, b] = pair;
+  if (Math.random() < 0.5) [a, b] = [b, a];
+  return { skill: "mul", a, b, op: "×", ans: a * b };
+}
+
+function goldAnswer(ok, dt) {
+  const fb = $("fbChip");
+  fb.textContent = (ok ? "✓ " : "✗ ") + fmtSec(dt);
+  fb.className = "fb-chip " + (ok ? "ok" : "bad");
+  if (!ok || dt > GOLD_FAST_SEC) {
+    endGold(false, { ok, dt });
+    return;
+  }
+  drill.goldDone++;
+  $("fuse").style.width = (drill.goldDone / GOLD_N) * 100 + "%";
+  $("drillCount").textContent = `${drill.goldDone}/${GOLD_N}`;
+  $("drillZone").className = "flash-ok";
+  if (drill.goldDone >= GOLD_N) {
+    endGold(true);
+    return;
+  }
+  drill.feedbackTimeout = setTimeout(nextProblem, FEEDBACK_OK_MS);
+}
+
+function endGold(passed, fail) {
+  clearTimeout(drill.feedbackTimeout);
+  const d = drill;
+  drill = null;
+  if (passed) {
+    pstate.ladder.comps[d.gold].gold = true;
+    persistState();
+  }
+  $("resCorrect").textContent = passed ? "👑" : `${d.goldDone}/${GOLD_N}`;
+  $("resHeroLbl").textContent = `${t("goldLbl")} · ${t("compShort")(d.gold)}`;
+  $("statRow").style.display = "none";
+  $("vsAvg").style.display = "none";
+  $("missCard").style.display = "none";
+  $("pbBanner").style.display = "none";
+  $("questBanner").style.display = "none";
+  let html;
+  if (passed) {
+    html = escapeHtml(`👑 ${t("goldPassedTitle")} ${T[lang].goldPassedLine(t("compName")(d.gold))}`);
+  } else {
+    const p = d.current;
+    const detail = fail.ok
+      ? T[lang].goldSlow({ t: fmtSec(fail.dt), sec: GOLD_FAST_SEC })
+      : `✗ ${p.a} × ${p.b} = ${p.ans}`;
+    html = escapeHtml(detail) + "<br>" + escapeHtml(T[lang].goldFailedLine({ done: d.goldDone, n: GOLD_N }));
+  }
+  showBanner($("promoBanner"), html);
+  goldRetry = passed ? null : d.gold;
+  $("againBtn").textContent = goldRetry ? t("goldTryAgain") : t("again");
+  show("result");
+  renderHome();
+  if (passed) celebrate(140);
+}
+
 /* The session clock counts pure solve time only: it runs while a problem
    is on screen awaiting an answer and pauses during feedback and review. */
 function remainingSec() {
@@ -632,8 +889,10 @@ function tickDrill() {
 function nextProblem() {
   if (!drill) return;
   // a just-missed problem takes its guaranteed comeback slot when due
-  const retry = nextRetry(drill.retries);
-  drill.current = retry
+  const retry = drill.gold ? null : nextRetry(drill.retries);
+  drill.current = drill.gold
+    ? goldProblem(drill.gold)
+    : retry
     ? { ...retry, fromRetry: true }
     : drill.skill === "mul"
       ? generateComposedProblem({ comps: pstate.ladder.comps, facts: pstate.ladder.facts, due: pstate.ladder.due })
@@ -704,6 +963,11 @@ function submit() {
   const p = drill.current;
   const val = parseInt(drill.input, 10);
   const dt = (Date.now() - drill.pStart) / 1000;
+  if (drill.gold) {
+    drill.locked = true;
+    goldAnswer(val === p.ans, dt);
+    return;
+  }
   drill.solveMs += dt * 1000; // bank the solve time; the clock pauses now
   drill.running = false;
   drill.attempted++;
@@ -727,6 +991,12 @@ function submit() {
   if (drill.skill === "mul") {
     if (p.comp) recordResult(pstate.ladder.comps, p.comp, ok);
     updateFactAfterAnswer(pstate.ladder.facts, pstate.ladder.due, factKey(p.a, p.b), ok, dt);
+  }
+  // daily quests tick along silently; completions are cheered at the end
+  if (pstate.quests) {
+    drill.questsDone.push(
+      ...questEvent(pstate.quests, { type: "answer", ok, secs: dt, comp: p.comp, oldMiss: !!(p.fromDue || p.fromMiss) })
+    );
   }
   const zone = $("drillZone");
   if (ok) {
@@ -807,10 +1077,20 @@ function endDrill() {
   let compResult = { changes: [], opened: [] };
   if (d.skill === "mul") compResult = adjustComponents(pstate.ladder.comps);
 
+  // the session itself can complete a quest (a real session: ≥5 attempts)
+  let questsCleared = d.questsDone;
+  if (pstate.quests) {
+    questsCleared = questsCleared.concat(questEvent(pstate.quests, { type: "session", attempted: d.attempted }));
+  }
+
   save(keys.sessions(currentProfile.id), sessions);
   persistState();
 
-  $("resCorrect").textContent = d.correct;
+  goldRetry = null;
+  $("againBtn").textContent = t("again");
+  $("resHeroLbl").textContent = t("solved");
+  $("statRow").style.display = "flex";
+  countUp($("resCorrect"), d.correct);
   $("resAcc").textContent = d.attempted ? acc + "%" : "–";
   $("resAvg").textContent = d.times.length ? rec.avg + "s" : "–";
   $("resLvl").textContent =
@@ -821,8 +1101,8 @@ function endDrill() {
         ? newLevel + (newLevel > d.level ? " ↑" : newLevel < d.level ? " ↓" : "")
         : pstate.config.tables.length + " " + t("tables");
   const pb = $("pbBanner");
-  pb.style.display = isPB ? "block" : "none";
-  pb.textContent = "🏅 " + t("newPB");
+  if (isPB) showBanner(pb, escapeHtml("🏅 " + t("newPB")));
+  else pb.style.display = "none";
   const promo = $("promoBanner");
   const promoBits = [];
   if (compResult.opened.length)
@@ -832,8 +1112,22 @@ function endDrill() {
       `${c.to > c.from ? "⬆️" : "🛟"} ${t("compName")(c.key)} ${c.to > c.from ? t("compUp") : t("compDown")} ${c.to}`
     )
   );
-  promo.style.display = promoBits.length ? "block" : "none";
-  promo.innerHTML = promoBits.map(escapeHtml).join("<br>");
+  if (promoBits.length) showBanner(promo, promoBits.map(escapeHtml).join("<br>"));
+  else promo.style.display = "none";
+
+  // quests completed this session get their cheer here, not mid-drill
+  const qb = $("questBanner");
+  if (questsCleared.length) {
+    let qHtml = escapeHtml(`🎯 ${t("questDoneLine")} ${questsCleared.map((q) => questLabel(q)).join(" · ")}`);
+    if (allQuestsDone(pstate.quests)) qHtml += `<br>${escapeHtml("🎉 " + t("questAllDone"))}`;
+    showBanner(qb, qHtml);
+  } else qb.style.display = "none";
+
+  // confetti only for mastery moments: level up, unlock, PB or a quest
+  const leveledUp = compResult.changes.some((c) => c.to > c.from);
+  if (isPB || leveledUp || compResult.opened.length || questsCleared.length) {
+    celebrate(isPB || compResult.opened.length ? 100 : 60);
+  }
 
   // session summary vs the player's OWN average — never vs other profiles
   const vs = $("vsAvg");

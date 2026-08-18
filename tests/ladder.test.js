@@ -185,6 +185,24 @@ test("missed problems get a guaranteed retry after 2-4 problems", () => {
   assert.equal(nextRetry(retries), null);
 });
 
+test("gold: eligible only open at top level, revoked when the band lowers the level", () => {
+  const { GOLD_N, GOLD_FAST_SEC, goldEligible } = ladderApi;
+  assert.ok(GOLD_N > 0 && GOLD_FAST_SEC > 0);
+  const comps = defaultComps();
+  assert.equal(goldEligible(comps.t3), false); // level 1
+  assert.equal(goldEligible(comps.t6), false); // locked
+  assert.equal(goldEligible(undefined), false);
+  comps.t3.lvl = 3;
+  assert.equal(goldEligible(comps.t3), true);
+  comps.t3.gold = true;
+  assert.equal(goldEligible(comps.t3), false); // already gold
+  // 70 % at the top level → banding lowers the level and takes the gold along
+  for (let i = 0; i < 20; i++) recordResult(comps, "t3", i < 14);
+  adjustComponents(comps);
+  assert.equal(comps.t3.lvl, 2);
+  assert.equal(comps.t3.gold, false);
+});
+
 test("COMP_ORDER unlocks tables before the advanced components", () => {
   assert.equal(COMP_ORDER[0], "t1");
   assert.deepEqual(COMP_ORDER.slice(-3), ["big1", "sq", "big2"]);

@@ -78,15 +78,28 @@ h2{font-size:22px; margin:14px 0 10px; letter-spacing:-0.02em;}
 .fb-chip.ok{color:var(--green);}
 .fb-chip.bad{color:var(--red);}
 
-/* per-component ladder */
+/* the path: components as a Duolingo-style winding trail of nodes */
 .ladder-focus{margin:6px 0 10px; font-weight:500;}
-.comp-grid{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;}
-.comp-chip{display:flex; flex-direction:column; gap:2px; align-items:flex-start; border:1.5px solid var(--line);
-  border-radius:12px; padding:7px 9px; font-size:13px; font-weight:500; background:var(--card);}
-.comp-chip .pips{font-size:10px; letter-spacing:2px; color:var(--blue);}
-.comp-chip.locked{opacity:.45;}
-.comp-chip.locked .pips{color:var(--muted); letter-spacing:0;}
-.comp-chip.focus{border-color:var(--blue); box-shadow:0 0 0 2px #2B50E033;}
+.path-wrap{max-height:360px; overflow-y:auto; margin:4px -4px 0; padding:0 4px; border-radius:12px;}
+.path{position:relative;}
+.path-dot{position:absolute; width:5px; height:5px; border-radius:50%; background:#C9D1E0;}
+.path-node{position:absolute; width:62px; height:62px; border-radius:50%; border:2px solid var(--line);
+  background:var(--card); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+  font-weight:700; font-size:12px; color:var(--ink); padding:0; overflow:visible;}
+.path-node .pn-stars{font-size:10px; color:var(--amber); letter-spacing:1px; font-weight:400;}
+.path-node.locked{opacity:.5; background:#EDF0F6;}
+.path-node.locked .pn-stars{font-size:12px; letter-spacing:0;}
+.path-node.open-node{border-color:var(--blue); background:#F3F6FE;}
+.path-node.focus::after{content:""; position:absolute; inset:-8px; border-radius:50%;
+  border:3px solid var(--blue); animation:pulse 1.6s ease-out infinite;}
+@keyframes pulse{0%{transform:scale(.85); opacity:.6;} 70%{transform:scale(1.1); opacity:0;} 100%{transform:scale(1.1); opacity:0;}}
+.path-node.gold{background:linear-gradient(160deg,#FFEBB0,#FFC53D); border-color:#E0A400;}
+.path-node.gold .pn-stars{font-size:13px; letter-spacing:0;}
+.path-node.ready{border-color:#E0A400; box-shadow:0 0 0 3px #FFC53D55; cursor:pointer;}
+.path-node.ready::before{content:"👑"; position:absolute; top:-13px; right:-7px; font-size:16px;
+  animation:bob 1.4s ease-in-out infinite;}
+@keyframes bob{0%,100%{transform:translateY(0);} 50%{transform:translateY(-4px);}}
+.gold-hint{margin:10px 0 0; font-weight:500;}
 .hm-insights{margin-top:12px; background:#FFF6DE; border:1.5px solid #F1D998; border-radius:12px; padding:9px 12px; font-size:13px;}
 
 /* mastery heatmap */
@@ -124,6 +137,29 @@ h2{font-size:22px; margin:14px 0 10px; letter-spacing:-0.02em;}
 .stat b{display:block; font-size:22px; font-variant-numeric:tabular-nums;}
 .stat span{font-size:12px; color:var(--muted);}
 .pb-banner{background:var(--amber); border-radius:14px; padding:10px 14px; font-weight:700; text-align:center; margin-top:12px; display:none;}
+.pb-banner.pop{animation:pop .5s cubic-bezier(.2,1.6,.4,1);}
+@keyframes pop{from{transform:scale(.6); opacity:0;} to{transform:none; opacity:1;}}
+
+/* daily quests */
+.q-row{display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); font-size:14px;}
+.q-row:last-child{border-bottom:none; padding-bottom:2px;}
+.q-row .q-lbl{flex:1;}
+.q-row .q-prog{color:var(--muted); font-weight:600; font-variant-numeric:tabular-nums;}
+.q-row.done .q-lbl{color:var(--muted); text-decoration:line-through;}
+.q-row.done .q-prog{color:var(--green);}
+
+/* confetti (celebrations for mastery moments only) */
+#cfHost{position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:60;}
+.cf{position:absolute; top:-16px; width:9px; height:13px; border-radius:2px; opacity:0;
+  animation-name:cf-fall; animation-timing-function:ease-in; animation-fill-mode:forwards;}
+@keyframes cf-fall{
+  0%{opacity:1; transform:translate(0,0) rotate(0);}
+  80%{opacity:1;}
+  100%{opacity:0; transform:translate(var(--drift,0px),105vh) rotate(var(--rot,360deg));}
+}
+@media (prefers-reduced-motion: reduce){
+  .cf, .path-node.focus::after, .path-node.ready::before, .pb-banner.pop{animation:none;}
+}
 .miss-list{margin-top:6px; font-size:15px;}
 .miss-list div{padding:7px 0; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; font-variant-numeric:tabular-nums;}
 .miss-list div:last-child{border-bottom:none;}
