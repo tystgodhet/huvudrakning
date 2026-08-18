@@ -66,6 +66,11 @@
     <p class="sub" data-i="pickSkill">Välj vad du vill träna på idag.</p>
     <div class="skill-grid" id="skillGrid"></div>
 
+    <div class="card" id="questCard" style="display:none; margin-top:12px;">
+      <b data-i="questsTitle">Dagens uppdrag</b>
+      <div id="questList"></div>
+    </div>
+
     <div class="card" id="ladderCard" style="display:none; margin-top:12px;">
       <b data-i="ladderTitle">Nivåstege</b>
       <div id="ladderList"></div>
@@ -107,15 +112,16 @@
   <section class="screen" id="scr-result">
     <div class="result-hero">
       <div class="huge" id="resCorrect">0</div>
-      <div class="lbl" data-i="solved">rätt lösta</div>
+      <div class="lbl" id="resHeroLbl" data-i="solved">rätt lösta</div>
     </div>
-    <div class="stat-row">
+    <div class="stat-row" id="statRow">
       <div class="stat"><b id="resAcc">–</b><span data-i="accuracy">träffsäkerhet</span></div>
       <div class="stat"><b id="resAvg">–</b><span data-i="avgTime">snitt/tal</span></div>
       <div class="stat"><b id="resLvl">–</b><span data-i="level">nivå</span></div>
     </div>
     <div class="pb-banner" id="promoBanner" style="display:none;">🔓</div>
     <div class="pb-banner" id="pbBanner">🏅</div>
+    <div class="pb-banner" id="questBanner" style="display:none;">🎯</div>
     <p class="sub" id="vsAvg" style="display:none; text-align:center; margin:10px 0 0;"></p>
     <div class="card" id="missCard" style="margin-top:12px; display:none;">
       <b data-i="toReview">Att träna extra på</b>
@@ -188,6 +194,8 @@
     <button class="quit" id="sdBack" data-i="backHome">Tillbaka</button>
   </section>
 </main>
+
+<div id="cfHost" aria-hidden="true"></div>
 
 <nav>
   <button id="nav-home" class="active" data-i="navPractice">Träna</button>
