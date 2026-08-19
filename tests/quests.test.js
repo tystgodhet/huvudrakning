@@ -5,8 +5,10 @@ import {
   QUEST_FAST_TARGET,
   QUEST_MISS_TARGET,
   QUEST_SESSION_MIN,
+  RAMP_DAYS,
   allQuestsDone,
   dayKey,
+  distinctDays,
   generateQuests,
   questEvent,
   questsStale,
@@ -26,8 +28,28 @@ test("dayKey is local YYYY-MM-DD", () => {
   assert.equal(dayKey(new Date(2026, 10, 23)), "2026-11-23");
 });
 
+test("distinctDays counts unique local dates", () => {
+  const d = (y, m, day, h) => new Date(y, m, day, h).getTime();
+  assert.equal(distinctDays([]), 0);
+  assert.equal(distinctDays([d(2026, 7, 18, 8), d(2026, 7, 18, 20), d(2026, 7, 19, 9)]), 2);
+});
+
+test("habit ramp: only the session quest until RAMP_DAYS training days", () => {
+  const st = { comps: trainedComps(), due: ["7x8"], misses: [] };
+  const q = generateQuests({ ...st, days: RAMP_DAYS - 1 }, "d");
+  assert.equal(q.list.length, 1);
+  assert.equal(q.list[0].type, "session");
+  assert.ok(q.ramp);
+  // a brand-new profile (days omitted) also ramps
+  assert.equal(generateQuests(st, "d").list.length, 1);
+  // at the threshold the full list opens and the ramp flag is gone
+  const full = generateQuests({ ...st, days: RAMP_DAYS }, "d");
+  assert.equal(full.list.length, 3);
+  assert.ok(!full.ramp);
+});
+
 test("quests: one session + fast-correct in the weakest component", () => {
-  const q = generateQuests({ comps: trainedComps(), due: [], misses: [] }, "2026-08-18");
+  const q = generateQuests({ comps: trainedComps(), due: [], misses: [], days: 7 }, "2026-08-18");
   assert.equal(q.day, "2026-08-18");
   assert.deepEqual(q.list[0], { type: "session", target: 1, done: 0 });
   assert.equal(q.list[1].type, "fastFocus");
@@ -37,11 +59,11 @@ test("quests: one session + fast-correct in the weakest component", () => {
 
 test("third quest settles old misses when any exist, else asks for fast answers", () => {
   const comps = trainedComps();
-  let q = generateQuests({ comps, due: ["7x8"], misses: [{ a: 9, b: 6 }] }, "d");
+  let q = generateQuests({ comps, due: ["7x8"], misses: [{ a: 9, b: 6 }], days: 7 }, "d");
   assert.deepEqual(q.list[2], { type: "clearMiss", target: 2, done: 0 });
-  q = generateQuests({ comps, due: ["7x8", "6x9", "8x8", "9x9"], misses: [] }, "d");
+  q = generateQuests({ comps, due: ["7x8", "6x9", "8x8", "9x9"], misses: [], days: 7 }, "d");
   assert.equal(q.list[2].target, QUEST_MISS_TARGET);
-  q = generateQuests({ comps, due: [], misses: [] }, "d");
+  q = generateQuests({ comps, due: [], misses: [], days: 7 }, "d");
   assert.deepEqual(q.list[2], { type: "fastAny", target: QUEST_FAST_ANY_TARGET, done: 0 });
 });
 
@@ -53,7 +75,7 @@ test("stale detection: missing, malformed or another day", () => {
 });
 
 test("fastFocus counts only fast correct answers in its component", () => {
-  const q = generateQuests({ comps: trainedComps(), due: [], misses: [] }, "d");
+  const q = generateQuests({ comps: trainedComps(), due: [], misses: [], days: 7 }, "d");
   const focus = q.list[1];
   questEvent(q, { type: "answer", ok: true, secs: FAST_SEC, comp: "t2" }); // counts
   questEvent(q, { type: "answer", ok: true, secs: FAST_SEC + 1, comp: "t2" }); // too slow
@@ -63,7 +85,7 @@ test("fastFocus counts only fast correct answers in its component", () => {
 });
 
 test("clearMiss counts only correct answers on old misses", () => {
-  const q = generateQuests({ comps: trainedComps(), due: ["7x8"], misses: [] }, "d");
+  const q = generateQuests({ comps: trainedComps(), due: ["7x8"], misses: [], days: 7 }, "d");
   const clear = q.list[2];
   questEvent(q, { type: "answer", ok: true, secs: 9, oldMiss: true }); // counts (speed irrelevant)
   questEvent(q, { type: "answer", ok: false, secs: 2, oldMiss: true }); // wrong
@@ -72,7 +94,7 @@ test("clearMiss counts only correct answers on old misses", () => {
 });
 
 test("a session counts once it has enough attempts; completion is reported once", () => {
-  const q = generateQuests({ comps: trainedComps(), due: [], misses: [] }, "d");
+  const q = generateQuests({ comps: trainedComps(), due: [], misses: [], days: 7 }, "d");
   assert.deepEqual(questEvent(q, { type: "session", attempted: QUEST_SESSION_MIN - 1 }), []);
   const done = questEvent(q, { type: "session", attempted: QUEST_SESSION_MIN });
   assert.equal(done.length, 1);
@@ -82,7 +104,7 @@ test("a session counts once it has enough attempts; completion is reported once"
 });
 
 test("allQuestsDone", () => {
-  const q = generateQuests({ comps: trainedComps(), due: [], misses: [] }, "d");
+  const q = generateQuests({ comps: trainedComps(), due: [], misses: [], days: 7 }, "d");
   assert.ok(!allQuestsDone(q));
   q.list.forEach((it) => (it.done = it.target));
   assert.ok(allQuestsDone(q));
