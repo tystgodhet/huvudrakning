@@ -36,7 +36,7 @@ import {
   updateFactAfterAnswer,
   weakestOpen,
 } from "./ladder.js";
-import { allQuestsDone, dayKey, generateQuests, questEvent, questsStale } from "./quests.js";
+import { RAMP_DAYS, allQuestsDone, dayKey, distinctDays, generateQuests, questEvent, questsStale } from "./quests.js";
 import { dayStreak, personalBest, thenVsNow, masteryByTable } from "./stats.js";
 import { sessionChartSVG } from "./charts.js";
 
@@ -495,6 +495,7 @@ function renderHello() {
 function renderHome() {
   renderSkillGrid();
   renderQuests();
+  renderDailyStatus();
   renderDurations();
   renderStartBtn();
 }
@@ -504,7 +505,15 @@ function ensureQuests() {
   if (!pstate) return;
   const day = dayKey();
   if (questsStale(pstate.quests, day)) {
-    pstate.quests = generateQuests({ comps: pstate.ladder.comps, due: pstate.ladder.due, misses: pstate.misses }, day);
+    pstate.quests = generateQuests(
+      {
+        comps: pstate.ladder.comps,
+        due: pstate.ladder.due,
+        misses: pstate.misses,
+        days: distinctDays(sessions.map((s) => s.at)),
+      },
+      day
+    );
     persistState();
   }
 }
@@ -533,6 +542,33 @@ function renderQuests() {
     row.innerHTML = `<span class="q-check">${done ? "✅" : "⬜️"}</span><span class="q-lbl">${escapeHtml(questLabel(q))}</span><span class="q-prog">${Math.min(q.done, q.target)}/${q.target}</span>`;
     host.appendChild(row);
   });
+  // habit ramp: one quest a day until the habit sticks, the rest teased
+  if (pstate.quests.ramp) {
+    const row = document.createElement("div");
+    row.className = "q-row q-locked";
+    const have = Math.min(distinctDays(sessions.map((s) => s.at)), RAMP_DAYS);
+    row.innerHTML = `<span class="q-check">🔒</span><span class="q-lbl">${escapeHtml(T[lang].questRampLocked({ have, need: RAMP_DAYS }))}</span>`;
+    host.appendChild(row);
+  }
+}
+
+/* "Done for today": after the day's first real session the home screen says
+   so instead of asking for more — the opposite of a countdown owl. */
+function renderDailyStatus() {
+  const streakEl = $("homeStreak");
+  const doneEl = $("doneLine");
+  if (!pstate) {
+    streakEl.style.display = "none";
+    doneEl.style.display = "none";
+    return;
+  }
+  const streak = dayStreak(sessions.map((s) => s.at));
+  streakEl.style.display = streak > 0 ? "block" : "none";
+  streakEl.textContent = `🔥 ${streak} ${streak === 1 ? t("streak1") : t("streakN")}`;
+  const sq = pstate.quests && pstate.quests.list.find((q) => q.type === "session");
+  const done = !!sq && sq.done >= sq.target;
+  doneEl.style.display = done ? "block" : "none";
+  doneEl.textContent = `✅ ${t("doneToday")}`;
 }
 
 function renderSkillGrid() {
@@ -1119,7 +1155,7 @@ function endDrill() {
   const qb = $("questBanner");
   if (questsCleared.length) {
     let qHtml = escapeHtml(`🎯 ${t("questDoneLine")} ${questsCleared.map((q) => questLabel(q)).join(" · ")}`);
-    if (allQuestsDone(pstate.quests)) qHtml += `<br>${escapeHtml("🎉 " + t("questAllDone"))}`;
+    if (pstate.quests.list.length > 1 && allQuestsDone(pstate.quests)) qHtml += `<br>${escapeHtml("🎉 " + t("questAllDone"))}`;
     showBanner(qb, qHtml);
   } else qb.style.display = "none";
 

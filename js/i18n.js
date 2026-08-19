@@ -112,6 +112,8 @@ export const T = {
     questFastAny: (p) => `${p.n} snabba rätt`,
     questDoneLine: "Uppdrag klarat:",
     questAllDone: "Alla dagens uppdrag klarade!",
+    questRampLocked: (p) => `Fler uppdrag låses upp när vanan sitter — ${p.have} av ${p.need} träningsdagar`,
+    doneToday: "Dagens pass klart — allt mer är bonus",
     probs: {
       invPercentOf: (p) => `${p.a} % av ${p.b}?`,
       invChangeUp: (p) => `Från ${p.a} till ${p.b} — uppgång i %?`,
@@ -264,6 +266,8 @@ export const T = {
     questFastAny: (p) => `${p.n} fast correct answers`,
     questDoneLine: "Quest complete:",
     questAllDone: "All of today's quests done!",
+    questRampLocked: (p) => `More quests unlock once the habit sticks — ${p.have} of ${p.need} training days`,
+    doneToday: "Today's session done — anything more is a bonus",
     probs: {
       invPercentOf: (p) => `${p.a}% of ${p.b}?`,
       invChangeUp: (p) => `From ${p.a} to ${p.b} — gain in %?`,

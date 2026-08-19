@@ -35,6 +35,12 @@ served as static files. UI is Swedish by default with an English toggle.
   the player's actual weaknesses ("5 fast correct in the 8s table", "settle
   3 old misses", "do a session"). The reward is a checkmark and confetti —
   never XP, currency, shortcuts or play-time credit.
+- **Habit ramp**: for the first 7 training days the only quest is "do one
+  session" — consistency before volume, per the habit-formation and
+  spaced-practice literature — with the remaining quests teased as locked.
+  After the day's first real session the home screen says "done for today —
+  anything more is a bonus" instead of asking for more (the opposite of a
+  countdown owl), and the day streak shows as a 🔥 line.
 - **Celebrations**: confetti and banner pops for mastery moments only —
   level ups, unlocks, personal bests, completed quests and gold runs.
   Respects `prefers-reduced-motion`.

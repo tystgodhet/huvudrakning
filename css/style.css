@@ -141,12 +141,16 @@ h2{font-size:22px; margin:14px 0 10px; letter-spacing:-0.02em;}
 @keyframes pop{from{transform:scale(.6); opacity:0;} to{transform:none; opacity:1;}}
 
 /* daily quests */
+.streak-home{margin:-8px 0 12px; font-weight:600; color:var(--ink);}
+.done-line{background:#D9F2E4; color:#1F7A4D; border-radius:14px; padding:11px 14px; font-weight:600;
+  font-size:14px; text-align:center; margin-top:14px;}
 .q-row{display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); font-size:14px;}
 .q-row:last-child{border-bottom:none; padding-bottom:2px;}
 .q-row .q-lbl{flex:1;}
 .q-row .q-prog{color:var(--muted); font-weight:600; font-variant-numeric:tabular-nums;}
 .q-row.done .q-lbl{color:var(--muted); text-decoration:line-through;}
 .q-row.done .q-prog{color:var(--green);}
+.q-row.q-locked{color:var(--muted); font-size:13px;}
 
 /* confetti (celebrations for mastery moments only) */
 #cfHost{position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:60;}
