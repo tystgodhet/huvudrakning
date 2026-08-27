@@ -474,14 +474,22 @@ $("familyJoinToggle").onclick = () => {
   renderFamilyCard();
 };
 
-$("familyJoinBtn").onclick = () => {
+function submitFamilyJoin() {
   const n = normalizeFamilyCode($("familyJoinCode").value);
   if (!n) {
     alert(t("familyBadCode"));
     return;
   }
   joinFamily(n);
-};
+}
+
+$("familyJoinBtn").onclick = submitFamilyJoin;
+$("familyJoinCode").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    submitFamilyJoin();
+  }
+});
 
 $("familyLeave").onclick = async () => {
   if (!confirm(t("familyLeaveConfirm"))) return;

@@ -226,7 +226,7 @@ button.sess-item:active{background:#E8EDFC;}
 .family-chip.current{border-color:var(--blue); box-shadow:0 0 0 2px #2B50E033;}
 .family-chip.today .sig{color:#1F7A4D;}
 .family-chip.remote, .prof-btn.remote{cursor:default;}
-.family-code{font-size:26px; font-weight:700; letter-spacing:0.22em; text-align:center;
+.family-code{font-size:26px; font-weight:700; letter-spacing:0.08em; text-align:center;
   margin:10px 0 4px; font-variant-numeric:tabular-nums;}
 .family-card-hint{margin:8px 0 0; font-size:13px;}
 
