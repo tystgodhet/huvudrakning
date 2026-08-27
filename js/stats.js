@@ -24,6 +24,33 @@ export function dayStreak(timestamps, now = Date.now()) {
 }
 
 /**
+ * Most recent session timestamp, or null if the history is empty.
+ * @param {number[]} timestamps
+ */
+export function lastSessionAt(timestamps) {
+  if (!timestamps.length) return null;
+  return Math.max(...timestamps);
+}
+
+/**
+ * Last practice as a local calendar-day signal relative to `now`.
+ * A parent glance: today / yesterday / an older date / never — never a
+ * comparison against anyone else.
+ * @param {number[]} timestamps session timestamps (ms)
+ * @param {number} [now]
+ * @returns {{kind: "today"|"yesterday"|"date"|"never", at: number|null}}
+ */
+export function lastPractice(timestamps, now = Date.now()) {
+  const at = lastSessionAt(timestamps);
+  if (at == null) return { kind: "never", at: null };
+  if (dayKey(at) === dayKey(now)) return { kind: "today", at };
+  const y = new Date(now);
+  y.setDate(y.getDate() - 1);
+  if (dayKey(at) === dayKey(y.getTime())) return { kind: "yesterday", at };
+  return { kind: "date", at };
+}
+
+/**
  * Personal bests for one skill: most correct in a session, and fastest
  * average pace (only sessions with ≥5 attempts count for pace).
  * @returns {{bestCorrect:number, bestAvg:number|null}|null}

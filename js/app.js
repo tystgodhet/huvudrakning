@@ -37,7 +37,7 @@ import {
   weakestOpen,
 } from "./ladder.js";
 import { RAMP_DAYS, allQuestsDone, dayKey, distinctDays, generateQuests, questEvent, questsStale } from "./quests.js";
-import { dayStreak, personalBest, thenVsNow, masteryByTable } from "./stats.js";
+import { dayStreak, lastPractice, personalBest, thenVsNow, masteryByTable } from "./stats.js";
 import { sessionChartSVG } from "./charts.js";
 
 const $ = (id) => document.getElementById(id);
@@ -208,13 +208,71 @@ function persistState() {
   if (currentProfile) save(keys.state(currentProfile.id), pstate);
 }
 
+/** This device's sessions for a profile — in-memory for the current one. */
+function sessionsFor(id) {
+  if (currentProfile && id === currentProfile.id) return sessions;
+  return load(keys.sessions(id)) || [];
+}
+
+function fmtPracticeDate(at) {
+  const locale = lang === "sv" ? "sv-SE" : "en-GB";
+  const d = new Date(at);
+  const opts = { day: "numeric", month: "short" };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+  return d.toLocaleDateString(locale, opts);
+}
+
+/** Glanceable last-practice + streak for one profile. Own history only. */
+function practiceMeta(timestamps) {
+  const lp = lastPractice(timestamps);
+  const when =
+    lp.kind === "today"
+      ? t("lastPracticeToday")
+      : lp.kind === "yesterday"
+        ? t("lastPracticeYesterday")
+        : lp.kind === "never"
+          ? t("lastPracticeNever")
+          : fmtPracticeDate(lp.at);
+  const streak = dayStreak(timestamps);
+  return { kind: lp.kind, text: streak > 0 ? `${when} · 🔥 ${streak}` : when };
+}
+
+function renderFamilyRow() {
+  const row = $("familyRow");
+  if (!row) return;
+  if (profiles.length < 2) {
+    row.hidden = true;
+    row.innerHTML = "";
+    return;
+  }
+  row.hidden = false;
+  row.innerHTML = "";
+  profiles.forEach((p) => {
+    const meta = practiceMeta(sessionsFor(p.id).map((s) => s.at));
+    const b = document.createElement("button");
+    const current = currentProfile && p.id === currentProfile.id;
+    b.className = "family-chip" + (current ? " current" : "") + (meta.kind === "today" ? " today" : "");
+    if (current) b.setAttribute("aria-current", "true");
+    b.setAttribute("aria-label", `${p.name}, ${meta.text}`);
+    b.innerHTML = `<span class="em">${p.emoji}</span><span class="family-body"><span class="name">${escapeHtml(p.name)}</span><span class="sig">${escapeHtml(meta.text)}</span></span>`;
+    b.onclick = () => {
+      selectProfile(p.id);
+      show("home");
+    };
+    row.appendChild(b);
+  });
+}
+
 function renderProfiles() {
   const list = $("profList");
   list.innerHTML = "";
   profiles.forEach((p) => {
+    const meta = practiceMeta(sessionsFor(p.id).map((s) => s.at));
     const b = document.createElement("button");
-    b.className = "prof-btn" + (currentProfile && p.id === currentProfile.id ? " current" : "");
-    b.innerHTML = `<span class="em">${p.emoji}</span><span>${escapeHtml(p.name)}</span>`;
+    const current = currentProfile && p.id === currentProfile.id;
+    b.className = "prof-btn" + (current ? " current" : "") + (meta.kind === "today" ? " today" : "");
+    if (current) b.setAttribute("aria-current", "true");
+    b.innerHTML = `<span class="em">${p.emoji}</span><span class="prof-body"><span>${escapeHtml(p.name)}</span><span class="prof-sig">${escapeHtml(meta.text)}</span></span>`;
     b.onclick = () => {
       selectProfile(p.id);
       show("home");
@@ -493,6 +551,7 @@ function renderHello() {
 }
 
 function renderHome() {
+  renderFamilyRow();
   renderSkillGrid();
   renderQuests();
   renderDailyStatus();

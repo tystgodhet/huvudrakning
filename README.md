@@ -10,7 +10,11 @@ served as static files. UI is Swedish by default with an English toggle.
 
 ## Features
 
-- **Local profiles** (name + avatar emoji), multiple kids on one device
+- **Local profiles** (name + avatar emoji), multiple kids on one device.
+  The profile picker — and a compact family row on the home screen when
+  more than one profile exists — shows each person's last practice
+  (today / yesterday / a date / never) and their day streak, so a parent
+  can see who trained. Profiles are never ranked against each other.
 - **Placement test** for new profiles, Duolingo-style: a skippable 2–3
   minute adaptive test (staircase for +/−, rising probes for the tables)
   that sets the starting levels — rounding down on uncertainty, leaving no
@@ -170,7 +174,7 @@ js/app.js             DOM controller: screens, drill loop, rendering
 js/problems.js        pure: problem generation, miss resampling, tip selection
 js/adaptive.js        pure: level up/down rules
 js/quests.js          pure: daily quest generation + progress
-js/stats.js           pure: streak, personal bests, mastery, then-vs-now
+js/stats.js           pure: streak, last-practice, personal bests, mastery, then-vs-now
 js/i18n.js            sv/en copy incl. tip templates
 js/storage.js         localStorage wrapper + export/import
 js/charts.js          SVG chart rendering
