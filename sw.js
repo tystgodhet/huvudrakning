@@ -1,5 +1,5 @@
 /* Cache-first service worker. Bump VERSION on every deploy to refresh clients. */
-const VERSION = "huvudrakning-v12";
+const VERSION = "huvudrakning-v13";
 const RUNTIME = VERSION + ":runtime";
 
 const PRECACHE = [
@@ -9,6 +9,9 @@ const PRECACHE = [
   "./manifest.webmanifest",
   "./js/app.js",
   "./js/i18n.js",
+  "./js/config.js",
+  "./js/family.js",
+  "./js/family-sync.js",
   "./js/storage.js",
   "./js/problems.js",
   "./js/adaptive.js",
@@ -44,6 +47,11 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  const sameOrigin = url.origin === self.location.origin;
+  const font = /fonts\.(googleapis|gstatic)\.com$/.test(url.hostname);
+  // Never cache-first the family worker (or any other API origin).
+  if (!sameOrigin && !font) return;
   e.respondWith(
     (async () => {
       const cached = await caches.match(req, { ignoreSearch: true });
