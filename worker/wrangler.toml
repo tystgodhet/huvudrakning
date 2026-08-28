@@ -1,0 +1,15 @@
+name = "huvudrakning-family"
+main = "src/index.js"
+compatibility_date = "2025-10-08"
+workers_dev = true
+
+# One-time: from this folder run
+#   npx wrangler kv namespace create ROOMS
+# and paste the id below. Then: npx wrangler deploy
+[[kv_namespaces]]
+binding = "ROOMS"
+id = "REPLACE_AFTER_KV_NAMESPACE_CREATE"
+
+[vars]
+# Origin of the GitHub Pages site (no path). localhost / 127.0.0.1 any port is also allowed.
+PAGES_ORIGIN = "https://tystgodhet.github.io"

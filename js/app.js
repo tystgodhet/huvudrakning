@@ -3,6 +3,17 @@
 
 import { keys, load, save, remove, exportProfile, exportAnalysis, sessionsToCSV, parseImport } from "./storage.js";
 import { T, tipText, problemText } from "./i18n.js";
+import { buildPresence, formatFamilyCode, generateFamilyCode, mergeFamilyMembers, normalizeFamilyCode, visibleFamilyCount } from "./family.js";
+import {
+  clearFamilyMembership,
+  familySyncEnabled,
+  fetchRoom,
+  loadFamilyCode,
+  loadFamilySnapshot,
+  persistFamilyCode,
+  publishPresence,
+  unpublishPresence,
+} from "./family-sync.js";
 import { generateProblem, generateComposedProblem, componentPool, tipFor } from "./problems.js";
 import {
   MUL_PROBES,
@@ -61,6 +72,9 @@ let progSkill = "mul";
 let npEmoji = EMOJIS[0];
 let sdSession = null; // session record shown in the detail view
 let sdFilter = "all"; // "all" | "focus"
+let remoteMembers = familySyncEnabled() && loadFamilyCode() ? loadFamilySnapshot() : [];
+let familyPulse = null;
+let familyJoinOpen = false;
 
 function t(key) {
   return T[lang][key];
@@ -190,6 +204,12 @@ function show(name) {
   document.querySelectorAll("nav button").forEach((b) => b.classList.remove("active"));
   if (navMap[name]) $(navMap[name]).classList.add("active");
   if (name === "progress") renderProgress();
+  if (name === "home" || name === "profiles") {
+    if (name === "profiles") renderFamilyCard();
+    touchFamilySync();
+  } else {
+    stopFamilyPulse();
+  }
 }
 
 /* ============ profiles ============ */
@@ -222,25 +242,46 @@ function fmtPracticeDate(at) {
   return d.toLocaleDateString(locale, opts);
 }
 
-/** Glanceable last-practice + streak for one profile. Own history only. */
+function practiceWhen(lp) {
+  return lp.kind === "today"
+    ? t("lastPracticeToday")
+    : lp.kind === "yesterday"
+      ? t("lastPracticeYesterday")
+      : lp.kind === "never"
+        ? t("lastPracticeNever")
+        : fmtPracticeDate(lp.at);
+}
+
+function practiceSig(when, streak) {
+  return streak > 0 ? `${when} · 🔥 ${streak}` : when;
+}
+
+/** Glanceable last-practice + streak for one local profile. Own history only. */
 function practiceMeta(timestamps) {
   const lp = lastPractice(timestamps);
-  const when =
-    lp.kind === "today"
-      ? t("lastPracticeToday")
-      : lp.kind === "yesterday"
-        ? t("lastPracticeYesterday")
-        : lp.kind === "never"
-          ? t("lastPracticeNever")
-          : fmtPracticeDate(lp.at);
-  const streak = dayStreak(timestamps);
-  return { kind: lp.kind, text: streak > 0 ? `${when} · 🔥 ${streak}` : when };
+  return { kind: lp.kind, text: practiceSig(practiceWhen(lp), dayStreak(timestamps)) };
+}
+
+function remoteMeta(member) {
+  const lp = lastPractice(member.lastAt == null ? [] : [member.lastAt]);
+  const when = practiceWhen(lp);
+  return { kind: lp.kind, text: `${practiceSig(when, member.streak || 0)} · ${t("familyRemote")}` };
+}
+
+function visibleRemotes() {
+  if (!familySyncEnabled() || !loadFamilyCode()) return [];
+  return mergeFamilyMembers(profiles, remoteMembers);
+}
+
+function chipHtml(emoji, name, sig) {
+  return `<span class="em">${emoji}</span><span class="family-body"><span class="name">${escapeHtml(name)}</span><span class="sig">${escapeHtml(sig)}</span></span>`;
 }
 
 function renderFamilyRow() {
   const row = $("familyRow");
   if (!row) return;
-  if (profiles.length < 2) {
+  const remotes = visibleRemotes();
+  if (visibleFamilyCount(profiles, remotes) < 2) {
     row.hidden = true;
     row.innerHTML = "";
     return;
@@ -254,12 +295,20 @@ function renderFamilyRow() {
     b.className = "family-chip" + (current ? " current" : "") + (meta.kind === "today" ? " today" : "");
     if (current) b.setAttribute("aria-current", "true");
     b.setAttribute("aria-label", `${p.name}, ${meta.text}`);
-    b.innerHTML = `<span class="em">${p.emoji}</span><span class="family-body"><span class="name">${escapeHtml(p.name)}</span><span class="sig">${escapeHtml(meta.text)}</span></span>`;
+    b.innerHTML = chipHtml(p.emoji, p.name, meta.text);
     b.onclick = () => {
       selectProfile(p.id);
       show("home");
     };
     row.appendChild(b);
+  });
+  remotes.forEach((p) => {
+    const meta = remoteMeta(p);
+    const el = document.createElement("div");
+    el.className = "family-chip remote" + (meta.kind === "today" ? " today" : "");
+    el.setAttribute("aria-label", `${p.name}, ${meta.text}`);
+    el.innerHTML = chipHtml(p.emoji, p.name, meta.text);
+    row.appendChild(el);
   });
 }
 
@@ -279,6 +328,14 @@ function renderProfiles() {
     };
     list.appendChild(b);
   });
+  visibleRemotes().forEach((p) => {
+    const meta = remoteMeta(p);
+    const el = document.createElement("div");
+    el.className = "prof-btn remote" + (meta.kind === "today" ? " today" : "");
+    el.setAttribute("aria-label", `${p.name}, ${meta.text}`);
+    el.innerHTML = `<span class="em">${p.emoji}</span><span class="prof-body"><span>${escapeHtml(p.name)}</span><span class="prof-sig">${escapeHtml(meta.text)}</span></span>`;
+    list.appendChild(el);
+  });
   if (currentProfile) {
     const del = document.createElement("button");
     del.className = "danger";
@@ -286,10 +343,12 @@ function renderProfiles() {
     del.onclick = () => {
       if (!confirm(t("confirmDelete"))) return;
       const id = currentProfile.id;
+      const code = loadFamilyCode();
       profiles = profiles.filter((p) => p.id !== id);
       save(keys.profiles, profiles);
       remove(keys.state(id));
       remove(keys.sessions(id));
+      if (code) unpublishPresence(code, id);
       currentProfile = null;
       pstate = null;
       sessions = [];
@@ -312,6 +371,7 @@ function renderProfiles() {
     };
     er.appendChild(b);
   });
+  renderFamilyCard();
 }
 
 $("npAdd").onclick = () => {
@@ -324,6 +384,133 @@ $("npAdd").onclick = () => {
   selectProfile(p.id);
   startPlacement(); // Duolingo-style: find the right starting level first
 };
+
+/* ============ family presence ============ */
+/* Optional. Empty FAMILY_SYNC_URL keeps the row local-only (PR #11). */
+const FAMILY_PULSE_MS = 60_000;
+
+function renderFamilyCard() {
+  const card = $("familyCard");
+  if (!card) return;
+  if (!familySyncEnabled()) {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  const code = loadFamilyCode();
+  $("familyIdle").hidden = !!code;
+  $("familyActive").hidden = !code;
+  $("familyJoinRow").hidden = !familyJoinOpen || !!code;
+  if (code) $("familyCodeShow").textContent = formatFamilyCode(code);
+}
+
+function stopFamilyPulse() {
+  if (familyPulse) {
+    clearInterval(familyPulse);
+    familyPulse = null;
+  }
+}
+
+function startFamilyPulse() {
+  if (familyPulse || !familySyncEnabled() || !loadFamilyCode()) return;
+  familyPulse = setInterval(() => {
+    if (document.visibilityState === "hidden") return;
+    const home = $("scr-home").classList.contains("visible");
+    const prof = $("scr-profiles").classList.contains("visible");
+    if (home || prof) touchFamilySync();
+  }, FAMILY_PULSE_MS);
+}
+
+async function publishCurrent() {
+  const code = loadFamilyCode();
+  if (!familySyncEnabled() || !code || !currentProfile) return;
+  const presence = buildPresence(
+    currentProfile,
+    sessions.map((s) => s.at)
+  );
+  if (presence) await publishPresence(code, presence);
+}
+
+async function publishAllLocals() {
+  const code = loadFamilyCode();
+  if (!familySyncEnabled() || !code) return;
+  for (const p of profiles) {
+    const presence = buildPresence(
+      p,
+      sessionsFor(p.id).map((s) => s.at)
+    );
+    if (presence) await publishPresence(code, presence);
+  }
+}
+
+async function touchFamilySync() {
+  if (!familySyncEnabled() || !loadFamilyCode()) {
+    remoteMembers = [];
+    renderFamilyRow();
+    stopFamilyPulse();
+    return;
+  }
+  await publishCurrent();
+  remoteMembers = await fetchRoom(loadFamilyCode());
+  renderFamilyRow();
+  if ($("scr-profiles").classList.contains("visible")) renderProfiles();
+  startFamilyPulse();
+}
+
+function joinFamily(code) {
+  const n = persistFamilyCode(code);
+  if (!n) return false;
+  familyJoinOpen = false;
+  if ($("familyJoinCode")) $("familyJoinCode").value = "";
+  renderFamilyCard();
+  publishAllLocals().then(() => touchFamilySync());
+  return true;
+}
+
+$("familyCreate").onclick = () => joinFamily(generateFamilyCode());
+
+$("familyJoinToggle").onclick = () => {
+  familyJoinOpen = !familyJoinOpen;
+  renderFamilyCard();
+};
+
+function submitFamilyJoin() {
+  const n = normalizeFamilyCode($("familyJoinCode").value);
+  if (!n) {
+    alert(t("familyBadCode"));
+    return;
+  }
+  joinFamily(n);
+}
+
+$("familyJoinBtn").onclick = submitFamilyJoin;
+$("familyJoinCode").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    submitFamilyJoin();
+  }
+});
+
+$("familyLeave").onclick = async () => {
+  if (!confirm(t("familyLeaveConfirm"))) return;
+  const code = loadFamilyCode();
+  const ids = profiles.map((p) => p.id);
+  clearFamilyMembership();
+  remoteMembers = [];
+  familyJoinOpen = false;
+  stopFamilyPulse();
+  renderFamilyCard();
+  renderFamilyRow();
+  renderProfiles();
+  for (const id of ids) await unpublishPresence(code, id);
+};
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  const home = $("scr-home").classList.contains("visible");
+  const prof = $("scr-profiles").classList.contains("visible");
+  if (home || prof) touchFamilySync();
+});
 
 /* ============ export / import ============ */
 function download(filename, text, type) {
@@ -1180,6 +1367,7 @@ function endDrill() {
 
   save(keys.sessions(currentProfile.id), sessions);
   persistState();
+  publishCurrent();
 
   goldRetry = null;
   $("againBtn").textContent = t("again");

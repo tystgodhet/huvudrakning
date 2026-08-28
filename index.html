@@ -39,6 +39,25 @@
       </div>
       <div class="emoji-row" id="npEmojis"></div>
     </div>
+    <div class="card" id="familyCard" hidden>
+      <b data-i="familyTitle">Familj</b>
+      <p class="sub family-card-hint" data-i="familyHint">En kort kod ni delar. Då syns vem som tränat idag — utan konton.</p>
+      <div id="familyIdle">
+        <div class="io-row">
+          <button id="familyCreate" data-i="familyCreate">Skapa familj</button>
+          <button id="familyJoinToggle" data-i="familyHaveCode">Jag har en kod</button>
+        </div>
+        <div class="newprof" id="familyJoinRow" hidden>
+          <input id="familyJoinCode" maxlength="12" data-i-ph="familyJoinPh" placeholder="Kod" autocomplete="off" autocapitalize="characters" spellcheck="false">
+          <button id="familyJoinBtn" data-i="familyJoin">Gå med</button>
+        </div>
+      </div>
+      <div id="familyActive" hidden>
+        <div class="family-code" id="familyCodeShow"></div>
+        <p class="sub family-card-hint" data-i="familyCodeHint">Läs upp koden. Den som har den ser namn, avatar och senast tränat. Inga tal, svar eller resultat skickas.</p>
+        <button class="danger" id="familyLeave" data-i="familyLeave">Lämna familjen</button>
+      </div>
+    </div>
     <div class="card">
       <b data-i="moveData">Flytta data</b>
       <div class="io-row">
