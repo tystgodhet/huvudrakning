@@ -8,6 +8,8 @@ const PREFIX = "hr:v1:";
 export const keys = {
   lang: PREFIX + "lang",
   profiles: PREFIX + "profiles",
+  familyCode: PREFIX + "familyCode",
+  familySnapshot: PREFIX + "familySnapshot",
   state: (id) => PREFIX + "state:" + id,
   sessions: (id) => PREFIX + "sessions:" + id,
 };

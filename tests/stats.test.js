@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { dayStreak, personalBest, thenVsNow, masteryByTable } from "../js/stats.js";
+import { dayStreak, lastPractice, lastSessionAt, personalBest, thenVsNow, masteryByTable } from "../js/stats.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = new Date(2026, 6, 19, 15, 0).getTime(); // local noon-ish, avoids DST edges
@@ -31,6 +31,35 @@ test("empty history has no streak", () => {
 test("multiple sessions on one day count as one streak day", () => {
   const ts = [NOW, NOW - 1000, NOW - DAY];
   assert.equal(dayStreak(ts, NOW), 2);
+});
+
+test("last session is the latest timestamp, or null if none", () => {
+  assert.equal(lastSessionAt([]), null);
+  assert.equal(lastSessionAt([NOW - 5 * DAY, NOW - DAY, NOW - 10 * DAY]), NOW - DAY);
+});
+
+test("last practice is never when history is empty", () => {
+  assert.deepEqual(lastPractice([], NOW), { kind: "never", at: null });
+});
+
+test("last practice is today when the latest session is today", () => {
+  const ts = [NOW - 5 * DAY, NOW];
+  assert.deepEqual(lastPractice(ts, NOW), { kind: "today", at: NOW });
+});
+
+test("last practice is yesterday when the latest session was yesterday", () => {
+  const ts = [NOW - 5 * DAY, NOW - DAY];
+  assert.deepEqual(lastPractice(ts, NOW), { kind: "yesterday", at: NOW - DAY });
+});
+
+test("last practice is a date when the latest session is older than yesterday", () => {
+  const at = NOW - 5 * DAY;
+  assert.deepEqual(lastPractice([at, NOW - 10 * DAY], NOW), { kind: "date", at });
+});
+
+test("last practice uses the latest session even if timestamps are unsorted", () => {
+  const ts = [NOW - 2 * DAY, NOW - 8 * DAY, NOW - DAY, NOW - 4 * DAY];
+  assert.deepEqual(lastPractice(ts, NOW), { kind: "yesterday", at: NOW - DAY });
 });
 
 const sess = (skill, correct, attempted, avg) => ({

@@ -212,12 +212,33 @@ button.sess-item:active{background:#E8EDFC;}
 .tn-head span:not(.lbl){min-width:44px; text-align:right;}
 .tn-head span:last-child{min-width:48px;}
 
+/* family row: glanceable last-practice — never a ranking */
+.family-row{display:flex; gap:8px; overflow-x:auto; margin:-2px 0 14px; padding:2px 0;
+  scrollbar-width:none; -webkit-overflow-scrolling:touch;}
+.family-row[hidden]{display:none;}
+.family-row::-webkit-scrollbar{display:none;}
+.family-chip{display:flex; align-items:center; gap:8px; flex:none; background:var(--card);
+  border:1.5px solid var(--line); border-radius:14px; padding:8px 12px; text-align:left;}
+.family-chip .em{font-size:20px;}
+.family-chip .family-body{display:flex; flex-direction:column; gap:1px; min-width:0;}
+.family-chip .name{font-weight:600; font-size:14px;}
+.family-chip .sig{font-size:12px; font-weight:500; color:var(--muted);}
+.family-chip.current{border-color:var(--blue); box-shadow:0 0 0 2px #2B50E033;}
+.family-chip.today .sig{color:#1F7A4D;}
+.family-chip.remote, .prof-btn.remote{cursor:default;}
+.family-code{font-size:26px; font-weight:700; letter-spacing:0.08em; text-align:center;
+  margin:10px 0 4px; font-variant-numeric:tabular-nums;}
+.family-card-hint{margin:8px 0 0; font-size:13px;}
+
 /* profiles */
 .prof-list{display:flex; flex-direction:column; gap:10px;}
 .prof-btn{display:flex; align-items:center; gap:12px; background:var(--card); border:1.5px solid var(--line);
   border-radius:var(--radius); padding:14px; font-size:17px; font-weight:600; text-align:left;}
 .prof-btn .em{font-size:26px;}
+.prof-btn .prof-body{display:flex; flex-direction:column; gap:2px; min-width:0;}
+.prof-btn .prof-sig{font-size:13px; font-weight:500; color:var(--muted);}
 .prof-btn.current{border-color:var(--blue); box-shadow:0 0 0 2px #2B50E033;}
+.prof-btn.today .prof-sig{color:#1F7A4D;}
 .newprof{display:flex; gap:8px; margin-top:12px;}
 .newprof input{flex:1; border:1.5px solid var(--line); border-radius:14px; padding:12px; font-size:16px; font-family:var(--font); min-width:0;}
 .newprof button{background:var(--blue); color:#fff; border:none; border-radius:14px; padding:0 18px; font-weight:700; font-size:15px;}

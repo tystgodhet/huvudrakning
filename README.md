@@ -5,12 +5,27 @@ deliberate practice: short timed drills, adaptive difficulty, technique tips
 generated from the actual numbers you missed, and weakness-targeted
 resampling of past mistakes.
 
-No backend, no accounts, no build step, no dependencies. Vanilla HTML/CSS/JS
-served as static files. UI is Swedish by default with an English toggle.
+No accounts, no build step, no dependencies. Vanilla HTML/CSS/JS served as
+static files. UI is Swedish by default with an English toggle. Training data
+stays on the device. An optional one-file Cloudflare Worker can share a
+tiny presence chip (name, emoji, last practice, day streak) when a family
+shares a secret code — nothing else.
 
 ## Features
 
-- **Local profiles** (name + avatar emoji), multiple kids on one device
+- **Local profiles** (name + avatar emoji), multiple kids on one device.
+  The profile picker — and a compact family row on the home screen when
+  more than one *visible* person exists — shows each person's last practice
+  (today / yesterday / a date / never) and their day streak, so a parent
+  can see who trained. Profiles are never ranked against each other.
+- **Family code** (optional): a short shared secret, created or joined from
+  the profile screen. Kids on their own iPads and a parent phone see the
+  same chips for who last practiced — no accounts, no friend list, no feed.
+  Only a presence chip is published (stable id, name, emoji, last-practice
+  time, day streak). Problems, answers, accuracy and session logs never
+  leave the device. Tapping a remote chip does not open a profile; they
+  train on their own device. Leave family = stop publishing and drop the
+  remote chips. Without a sync URL the row stays local-only.
 - **Placement test** for new profiles, Duolingo-style: a skippable 2–3
   minute adaptive test (staircase for +/−, rising probes for the tables)
   that sets the starting levels — rounding down on uncertainty, leaving no
@@ -114,8 +129,8 @@ python3 -m http.server 8080     # or: npx serve .
 ## Tests
 
 Pure logic (problem generation, adaptive levels, streaks/stats,
-export/import validation) is unit-tested with Node's built-in runner —
-no dev dependencies. Requires Node 18+.
+export/import validation, family-code / presence merge) is unit-tested
+with Node's built-in runner — no dev dependencies. Requires Node 18+.
 
 ```bash
 npm test
@@ -146,6 +161,60 @@ pick up the new files.
 On Android, Chrome shows an "Install app" prompt (or ⋮ menu → *Add to Home
 screen*).
 
+## Family presence (optional)
+
+A family is a **shared secret code** (6 characters, no 0/O/1/I so a parent
+can read it out). Create one on the first device, read it to the others,
+join from **Profil**. Offline the app keeps the last snapshot and stays
+fully usable; sync is best-effort.
+
+The client does nothing until you set a sync URL. Empty
+`FAMILY_SYNC_URL` in `js/config.js` = the family row stays local-only,
+exactly as before.
+
+### One-time Cloudflare deploy
+
+You cannot skip this if you want cross-device chips. A free Cloudflare
+account is enough (Workers + KV). Durable Objects are not required.
+
+1. Create a free account at [cloudflare.com](https://www.cloudflare.com)
+   and install Node 18+.
+2. From the repo:
+
+   ```bash
+   cd worker
+   npx wrangler login
+   npx wrangler kv namespace create ROOMS
+   ```
+
+   Paste the printed `id` into `worker/wrangler.toml` (`kv_namespaces.id`).
+   If the Pages site is not `https://tystgodhet.github.io`, set
+   `PAGES_ORIGIN` to your origin (no path). `localhost` / `127.0.0.1`
+   any port are already allowed.
+
+3. Deploy once:
+
+   ```bash
+   npx wrangler deploy
+   ```
+
+4. Copy the worker URL (e.g. `https://huvudrakning-family.<you>.workers.dev`)
+   into `js/config.js`:
+
+   ```js
+   export const FAMILY_SYNC_URL = "https://huvudrakning-family.<you>.workers.dev";
+   ```
+
+   No trailing slash.
+
+5. Bump `VERSION` in `sw.js` and deploy the static app as usual, so
+   installed iPads pick up the new files.
+
+The worker stores one room per code. A member not seen for 30 days is
+dropped. Request bodies are not logged. CORS is the Pages origin plus
+localhost only. The payload is validated server-side to the same
+allowlist the client uses.
+
 ## Moving a profile between devices
 
 Profile → **Exportera profil** downloads a JSON file with the profile, its
@@ -155,11 +224,13 @@ levels/misses, and full session history. On the other device: Profile →
 ## Data & storage
 
 Everything lives in `localStorage` under versioned `hr:v1:*` keys:
-`profiles`, and per profile `state:<id>` (levels, outstanding misses capped
-at 60, session config) and `sessions:<id>` (append-only history). A heavy
-year of daily practice stays well under 100 kB per profile, which is why
-localStorage was chosen over IndexedDB — synchronous, simple, and
-export/import covers device migration.
+`profiles`, optional `familyCode` + `familySnapshot` (last fetched
+presence chips), and per profile `state:<id>` (levels, outstanding misses
+capped at 60, session config) and `sessions:<id>` (append-only history).
+A heavy year of daily practice stays well under 100 kB per profile, which
+is why localStorage was chosen over IndexedDB — synchronous, simple, and
+export/import covers device migration. The family worker never receives
+session logs.
 
 ## Structure
 
@@ -167,13 +238,17 @@ export/import covers device migration.
 index.html            markup
 css/style.css         styles (mobile-first, safe-area aware)
 js/app.js             DOM controller: screens, drill loop, rendering
+js/config.js          FAMILY_SYNC_URL (empty = family row stays local-only)
+js/family.js          pure: family code, presence allowlist, local+remote merge
+js/family-sync.js     best-effort presence GET/PUT (no-op without a sync URL)
 js/problems.js        pure: problem generation, miss resampling, tip selection
 js/adaptive.js        pure: level up/down rules
 js/quests.js          pure: daily quest generation + progress
-js/stats.js           pure: streak, personal bests, mastery, then-vs-now
+js/stats.js           pure: streak, last-practice, personal bests, mastery, then-vs-now
 js/i18n.js            sv/en copy incl. tip templates
 js/storage.js         localStorage wrapper + export/import
 js/charts.js          SVG chart rendering
+worker/               Cloudflare Worker + KV (one room per family code)
 sw.js                 service worker (precache + runtime cache)
 manifest.webmanifest  PWA manifest
 tools/gen-icons.mjs   dependency-free icon generator (npm run icons)
