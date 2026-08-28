@@ -4,4 +4,4 @@
 
    Example: "https://huvudrakning-family.your-subdomain.workers.dev" */
 
-export const FAMILY_SYNC_URL = "";
+export const FAMILY_SYNC_URL = "https://huvudrakning-family.tystgodhet.workers.dev";
